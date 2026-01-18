@@ -1,0 +1,9 @@
+@import "./auth.css";
+@import "./chat.css";
+@import "./dashboard.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
