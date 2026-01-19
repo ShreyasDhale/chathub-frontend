@@ -12,3 +12,12 @@ export type Message = {
   content: string;
   createdAt: string;
 };
+
+export type ChatListItem = {
+  conversationid: number;
+  typecode: 'GROUP' | 'ONE_TO_ONE';
+  chatname: string;
+  createdbyuserid: number;
+  creationdate: string; // ISO string
+};
+
