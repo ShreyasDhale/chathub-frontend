@@ -9,6 +9,12 @@ export function login(data: LoginRequestDto) {
   });
 }
 
+export function logout() {
+  return apiRequest<DynamicApiResponse<LoginResponseDto,null>>("/Users/Logout", {
+    method: "POST",
+  });
+}
+
 export function signup(data: SignupRequestDto) {
   return apiRequest<DynamicApiResponse<null,null>>("/Users/signup", {
     method: "POST",

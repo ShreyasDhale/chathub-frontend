@@ -1,150 +1,111 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { loadchats } from "../../services/api/dashboard.api";
-import { DynamicApiResponse } from "../../types/api.types";
-import { ChatListItem } from "../../types/chat.types";
+import { logout } from "../../services/api/auth.api";
 import { clearToken } from "../../utils/auth.storage";
-import { useRouter } from "next/router";
+import { joinConversation, leaveConversation } from "../../services/socket/chat.actions";
+import { getSignalRConnection } from "../../services/socket/signalrClient";
+import { ChatListItem } from "../../types/chat.types";
+
+import ChatList from "../../components/ui/ChatList";
+import ChatHeader from "../../components/ui/ChatHeadder";
+import ChatBody from "../../components/ui/ChatBody";
+import ChatInput from "../../components/ui/ChatInput";
 
 export default function DashboardScreen() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
 
+  const previousChatId = useRef<number | null>(null);
+  const connection = getSignalRConnection();
+
+  /* ------------------ Load chats ------------------ */
   useEffect(() => {
     fetchChats();
   }, []);
 
+
+  /* ---------------- Join / Leave conversation ---------------- */
+  useEffect(() => {
+    if (!activeChatId) return;
+    const prev = previousChatId.current;
+    if (prev) leaveConversation(prev);
+    joinConversation(activeChatId);
+    previousChatId.current = activeChatId;
+    return () => {
+      leaveConversation(activeChatId);
+    };
+  }, [activeChatId]);
+
+
+  /* ---------------- Message listener ---------------- */
+  useEffect(() => {
+    if (!connection) return;
+
+    const handler = (data: any) => {
+      setMessages(prev => [...prev, data]);
+    };
+
+    connection.on("MessageReceived", handler);
+    return () => connection.off("MessageReceived", handler);
+  }, [connection]);
+
+  /* ---------------- Actions ---------------- */
+  function sendMessage(message: string) {
+    if (!message.trim() || !activeChatId) return;
+    if (!connection) return;
+    connection.invoke("SendMessage", activeChatId, Date.now(), message);
+  }
+
   async function fetchChats() {
     try {
       setLoading(true);
-      const response: DynamicApiResponse<ChatListItem[], null> =
-        await loadchats();
-
-      setChats(response.Model ?? []);
+      const res = await loadchats();
+      setChats(res.Model ?? []);
     } finally {
       setLoading(false);
     }
   }
 
-  function handleLogout() {
-    const router = useRouter();
-    clearToken();      
-    router.push("/login");
+  async function handleLogout() {
+    setShowMenu(false);
+    await logout();
+    clearToken();
+    router.replace("/login");
   }
+
+  const activeChat = chats.find(c => c.conversationid === activeChatId);
 
   return (
     <div className="dashboard">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h3>Chats</h3>
+      <ChatList
+        chats={chats}
+        loading={loading}
+        activeChatId={activeChatId}
+        onSelect={setActiveChatId}
+        onLogout={handleLogout}
+        showMenu={showMenu}
+        toggleMenu={() => setShowMenu(v => !v)}
+      />
 
-          <div className="sidebar-menu">
-            <button
-              className="menu-button"
-              onClick={() => setShowMenu((v) => !v)}
-            >
-              ⋮
-            </button>
-
-            {showMenu && (
-              <div className="menu-dropdown">
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    setShowMenu(false);
-                    handleLogout();
-                  }}
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <ul className="user-list">
-          {loading
-            ? Array.from({ length: 11 }).map((_, i) => (
-                <li key={i} className="user shimmer">
-                  <div className="avatar shimmer-box" />
-                  <div className="user-info">
-                    <div className="shimmer-line short" />
-                    <div className="shimmer-line" />
-                  </div>
-                </li>
-              ))
-            : chats.map((chat) => (
-                <li
-                  key={chat.conversationid}
-                  className={`user ${
-                    activeChatId === chat.conversationid ? "active" : ""
-                  }`}
-                  onClick={() => setActiveChatId(chat.conversationid)}
-                >
-                  <div className="avatar">
-                    {chat.chatname.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="user-info">
-                    <span className="name">{chat.chatname}</span>
-                    <span className="status">
-                      {chat.typecode === "GROUP" ? "Group" : "Direct"}
-                    </span>
-                  </div>
-                </li>
-              ))}
-        </ul>
-      </aside>
-
-      {/* Main content */}
       <main className="chat-area">
-        {chats.find(chat => chat.conversationid == activeChatId) ? (
+        {activeChat ? (
           <>
-            {/* Chat header */}
-            <div className="chat-header">
-              <div className="chat-header-avatar">
-                {chats.find(chat => chat.conversationid == activeChatId)!.chatname.charAt(0).toUpperCase()}
-              </div>
-              <div className="chat-header-info">
-                <div className="chat-header-name">
-                  {chats.find(chat => chat.conversationid == activeChatId)!.chatname}
-                </div>
-                <div className="chat-header-type">
-                  {chats.find(chat => chat.conversationid == activeChatId)!.typecode === "GROUP" ? "Group" : "Direct"}
-                </div>
-              </div>
-            </div>
-
-            {/* Chat body */}
-            <div className="chat-body">
-              <div className="message-placeholder">
-                {/* Messages will appear here */}
-              </div>
-            </div>
-
-            {/* Chat input */}
-            <div className="chat-input">
-              <input
-                type="text"
-                placeholder="Type a message"
-                className="chat-textbox"
-              />
-              <button className="send-button">
-                Send
-              </button>
-            </div>
-
+            <ChatHeader chat={activeChat} />
+            <ChatBody messages={messages} activeChatId={activeChatId ?? 0} />
+            <ChatInput onSend={sendMessage} />
           </>
         ) : (
-          <div className="chat-placeholder">
-            Select a chat to start messaging
-          </div>
+          <div className="chat-placeholder">Select a chat to start messaging</div>
         )}
       </main>
-
     </div>
   );
 }
