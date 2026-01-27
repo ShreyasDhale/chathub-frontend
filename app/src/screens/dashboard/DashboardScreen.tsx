@@ -50,6 +50,7 @@ export default function DashboardScreen() {
     if (!connection) return;
 
     const handler = (data: any) => {
+      console.log("Message received:", data);
       setMessages(prev => [...prev, data]);
     };
 
