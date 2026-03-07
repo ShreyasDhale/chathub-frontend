@@ -21,3 +21,13 @@ export type ChatListItem = {
   creationdate: string; // ISO string
 };
 
+export type UsersListItem = {
+  userid: number;
+  username: 'GROUP' | 'ONE_TO_ONE';
+  email: string;
+  userstatusid: number;
+  createdby: string; 
+  creationdate: string; // ISO string
+  updatedby: string;
+  updateddate: string; // ISO string
+};

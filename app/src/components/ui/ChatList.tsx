@@ -1,12 +1,14 @@
-import { ChatListItem } from "../../types/chat.types";
+import { ChatListItem, UsersListItem } from "../../types/chat.types";
 
 
 type Props = {
   chats: ChatListItem[];
+  users: UsersListItem[];
   loading: boolean;
   activeChatId: number | null;
   onSelect: (id: number) => void;
   onLogout: () => void;
+  onNewChat: () => void;
   showMenu: boolean;
   toggleMenu: () => void;
 };
@@ -17,6 +19,7 @@ export default function ChatList({
   activeChatId,
   onSelect,
   onLogout,
+  onNewChat,
   showMenu,
   toggleMenu,
 }: Props) {
@@ -28,6 +31,7 @@ export default function ChatList({
         {showMenu && (
           <div className="menu-dropdown">
             <button className="menu-item" onClick={onLogout}>Logout</button>
+            <button className="menu-item" onClick={onNewChat}>New Chat</button>
           </div>
         )}
       </div>

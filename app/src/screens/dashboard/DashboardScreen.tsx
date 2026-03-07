@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadchats } from "../../services/api/dashboard.api";
+import { loadchats, loadusers } from "../../services/api/dashboard.api";
 import { logout } from "../../services/api/auth.api";
 import { clearToken } from "../../utils/auth.storage";
 import { joinConversation, leaveConversation } from "../../services/socket/chat.actions";
 import { getSignalRConnection } from "../../services/socket/signalrClient";
-import { ChatListItem } from "../../types/chat.types";
+import { ChatListItem, UsersListItem } from "../../types/chat.types";
 
 import ChatList from "../../components/ui/ChatList";
 import ChatHeader from "../../components/ui/ChatHeadder";
@@ -19,6 +19,7 @@ export default function DashboardScreen() {
 
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<ChatListItem[]>([]);
+  const [users, setUsers] = useState<UsersListItem[]>([]);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
@@ -75,6 +76,16 @@ export default function DashboardScreen() {
     }
   }
 
+  async function onNewChat() {
+    try {
+      setLoading(true);
+      const res = await loadusers();
+      setUsers(res.Model ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleLogout() {
     setShowMenu(false);
     await logout();
@@ -88,11 +99,13 @@ export default function DashboardScreen() {
     <div className="dashboard">
       <ChatList
         chats={chats}
+        users={users}
         loading={loading}
         activeChatId={activeChatId}
         onSelect={setActiveChatId}
         onLogout={handleLogout}
         showMenu={showMenu}
+        onNewChat={onNewChat}
         toggleMenu={() => setShowMenu(v => !v)}
       />
 
