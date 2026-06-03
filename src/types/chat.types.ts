@@ -23,11 +23,17 @@ export type ChatListItem = {
 
 export type UsersListItem = {
   userid: number;
-  username: 'GROUP' | 'ONE_TO_ONE';
+  username: string;
   email: string;
   userstatusid: number;
-  createdby: string; 
-  creationdate: string; // ISO string
-  updatedby: string;
-  updateddate: string; // ISO string
+  createdby: number;
+  creationdate: string;
+  updatedby: number;
+  updatedate: string;
+};
+
+export type StartChatRequest = {
+  conversationid: 0;
+  conversationname: string;
+  members: number[];
 };

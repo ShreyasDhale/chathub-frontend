@@ -60,8 +60,8 @@ export async function apiRequest<T>(
   ) {
     toast.success(json.Message);
   } else if (json && json.StatusCode !== 0) {
-    if (showToast && json.Message) {
-      toast.error(json.Message);
+    if (showToast) {
+      toast.error(json.Message?.trim() || json.Status || "Request failed");
     }
   }
 

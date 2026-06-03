@@ -2,13 +2,25 @@ import { ChatListItem } from "@/types/chat.types";
 
 type Props = {
   chat?: ChatListItem;
+  onBack?: () => void;
 };
 
-export default function ChatHeader({ chat }: Props) {
+export default function ChatHeader({ chat, onBack }: Props) {
   if (!chat) return null;
 
   return (
     <div className="chat-header">
+      {onBack && (
+        <button
+          type="button"
+          className="chat-back-button"
+          onClick={onBack}
+          aria-label="Back to chats"
+        >
+          ←
+        </button>
+      )}
+
       <div className="chat-header-avatar">
         {chat.chatname.charAt(0).toUpperCase()}
       </div>
