@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import ClientProviders from "./providers/ClientProviders";
+import ClientProviders from "@/providers/ClientProviders";
 
 export const metadata: Metadata = {
   title: "ChatHub",
@@ -26,9 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ClientProviders>
-          {children}
-        </ClientProviders>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );
