@@ -1,6 +1,11 @@
 "use client";
 
+/**
+ * New Chat flow: pick users → optional group name → POST /Conversations/StartChat.
+ * Rendered via portal so the modal covers the full viewport on all screen sizes.
+ */
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { loadusers } from "@/services/api/dashboard.api";
 import { startChat } from "@/services/api/chat.api";
 import { getUserId } from "@/utils/auth.storage";
@@ -41,6 +46,11 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
   const [step, setStep] = useState<"select" | "group-name">("select");
   const [groupName, setGroupName] = useState("");
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const currentUserId = Number(getUserId() ?? 0);
 
@@ -140,7 +150,7 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
     createChat(selected, name);
   }
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const errorBanner = error ? (
     <div className="alert alert-error" role="alert">
@@ -157,14 +167,14 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
     </div>
   ) : null;
 
-  return (
+  const modal = (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="new-chat-modal"
+        className={`new-chat-modal ${step === "group-name" ? "new-chat-modal--group" : ""}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="new-chat-title"
+        aria-labelledby={step === "select" ? "new-chat-title" : "group-name-title"}
       >
         {step === "select" ? (
           <>
@@ -277,7 +287,7 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
           <>
             <div className="modal-header">
               <div>
-                <h2>Group Name</h2>
+                <h2 id="group-name-title">Group Name</h2>
                 <p className="modal-subtitle">
                   Name your group with {selected.length} members
                 </p>
@@ -318,7 +328,7 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
               </div>
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer modal-footer--group">
               <div className="modal-footer-actions">
                 <button
                   className="btn-secondary"
@@ -341,4 +351,6 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

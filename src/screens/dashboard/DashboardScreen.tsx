@@ -18,6 +18,10 @@ import ChatBody from "@/components/ui/ChatBody";
 import ChatInput from "@/components/ui/ChatInput";
 import NewChatModal from "@/components/ui/NewChatModal";
 
+/**
+ * Main chat dashboard: sidebar list + active conversation panel.
+ * Real-time messages arrive via SignalR "MessageReceived" after JoinConversation.
+ */
 export default function DashboardScreen() {
   const router = useRouter();
 
@@ -35,6 +39,7 @@ export default function DashboardScreen() {
     fetchChats();
   }, []);
 
+  /** Join/leave SignalR groups when the user switches conversations. */
   useEffect(() => {
     if (!activeChatId) return;
     const prev = previousChatId.current;
@@ -46,6 +51,7 @@ export default function DashboardScreen() {
     };
   }, [activeChatId]);
 
+  /** Listen for inbound messages on the active hub connection. */
   useEffect(() => {
     if (!connection) return;
 
@@ -59,6 +65,7 @@ export default function DashboardScreen() {
     };
   }, [connection]);
 
+  /** Sends a text message through the SignalR hub (see Backend_Requirements.txt). */
   function sendMessage(message: string) {
     if (!message.trim() || !activeChatId) return;
     if (!connection) return;
@@ -80,6 +87,7 @@ export default function DashboardScreen() {
     setShowNewChatModal(true);
   }
 
+  /** After StartChat succeeds: refresh list and return to conversation picker. */
   async function handleChatCreated() {
     setShowNewChatModal(false);
     setMessages([]);
@@ -137,7 +145,7 @@ export default function DashboardScreen() {
               }}
             />
             <ChatBody messages={messages} activeChatId={activeChatId ?? 0} />
-            <ChatInput onSend={sendMessage} />
+            <ChatInput onSend={sendMessage} disabled={!connection} />
           </>
         ) : (
           <div className="chat-placeholder">

@@ -1,0 +1,212 @@
+================================================================================
+ChatHub Frontend — Backend Requirements
+================================================================================
+Document version : 1.0
+Last updated     : 2026-06-03
+Scope            : REST APIs + SignalR hub contracts required by the frontend
+Encryption       : OUT OF SCOPE for this phase. End-to-end / at-rest encryption
+                   will be added after core chat features are complete.
+================================================================================
+
+1. RESPONSE ENVELOPE (ALL REST ENDPOINTS)
+--------------------------------------------------------------------------------
+All APIs should return the existing DynamicApiResponse shape:
+
+  {
+    "StatusCode": 0,          // 0 = success
+    "Status": "Ok",
+    "TotalRecords": number | null,
+    "Message": string | null,
+    "Model": T | null,
+    "Value": unknown | null
+  }
+
+Auth: Bearer JWT in Authorization header unless noted otherwise.
+
+
+2. IMPLEMENTED REST APIs (ALREADY USED BY FRONTEND)
+--------------------------------------------------------------------------------
+Auth
+  POST   /Users/Login              Login (Username, Password)
+  POST   /Users/Logout             Logout current session
+  POST   /Users/signup             Register (Username, Email, Password)
+
+Users
+  GET    /Users/GetAllUsers        List users for New Chat picker
+
+Conversations
+  GET    /Conversations/GetUserConversations   Sidebar conversation list
+  POST   /Conversations/StartChat              Create 1:1 or group chat
+         Body: { conversationid: 0, conversationname, members: number[] }
+
+
+3. REST APIs REQUIRED (PLANNED — UI ICONS ALREADY SHOWN)
+--------------------------------------------------------------------------------
+Users / Profile
+  GET    /Users/Profile                      Current user profile
+  PUT    /Users/UpdateProfile                Update display name, avatar, etc.
+  PUT    /Users/ChangePassword               Change password
+
+Conversations
+  GET    /Conversations/GetConversationDetails/{conversationId}
+  GET    /Conversations/GetMembers/{conversationId}
+  GET    /Conversations/Search               ?query=&page=&pageSize=
+  POST   /Conversations/Mute                 { conversationId, muted: bool }
+  POST   /Conversations/Pin                   { conversationId, pinned: bool }
+  POST   /Conversations/Archive               { conversationId }
+  DELETE /Conversations/Leave                 { conversationId }   (group leave)
+  PUT    /Conversations/Rename                { conversationId, conversationname }
+  POST   /Conversations/AddMembers            { conversationId, members[] }
+  DELETE /Conversations/RemoveMember          { conversationId, userId }
+
+Messages
+  GET    /Messages/GetByConversation          ?conversationId=&cursor=&pageSize=
+         Returns messages newest-first or oldest-first (see pagination)
+  GET    /Messages/Search                     ?conversationId=&query=&page=&pageSize=
+  POST   /Messages/Send                        Optional REST fallback for send
+  PUT    /Messages/Edit                       { messageId, content }
+  DELETE /Messages/Delete                      { messageId }
+  POST   /Messages/MarkAsRead                  { conversationId, lastReadMessageId }
+
+Attachments (composer "attach" icon)
+  POST   /Messages/UploadAttachment           multipart/form-data
+         Returns: { attachmentId, url, fileName, mimeType, size }
+  GET    /Messages/DownloadAttachment/{id}
+
+Voice notes (composer "voice" icon)
+  POST   /Messages/UploadVoiceNote            multipart/form-data (audio/*)
+
+Notifications
+  GET    /Notifications/UnreadCount
+  GET    /Notifications/List                  ?page=&pageSize=
+  POST   /Notifications/MarkRead               { notificationIds[] }
+
+
+4. SIGNALR HUB (/hubs/chat)
+--------------------------------------------------------------------------------
+Connection: JWT via accessTokenFactory (already configured in frontend)
+
+4.1 Hub methods invoked BY client (connection.invoke)
+--------------------------------------------------------------------------------
+Implemented / expected now:
+  JoinConversation(conversationId: number)
+  LeaveConversation(conversationId: number)
+  SendMessage(conversationId: number, clientMessageId: number, message: string)
+
+Planned (UI icons added; backend TBD):
+  TypingStarted(conversationId: number)
+  TypingStopped(conversationId: number)
+  MarkMessagesRead(conversationId: number, lastReadMessageId: number)
+
+  -- Real-time calling (voice / video header icons) --
+  StartCall(conversationId: number, callType: "audio" | "video")
+  AcceptCall(callId: string)
+  RejectCall(callId: string)
+  EndCall(callId: string)
+  SendCallSignal(callId: string, signal: object)   // WebRTC ICE/SDP relay
+
+4.2 Events pushed TO client (connection.on)
+--------------------------------------------------------------------------------
+Implemented in dashboard (partial):
+  MessageReceived(payload)           // used in DashboardScreen
+         Expected: { messageId, conversationId, senderId, message, sentAt? }
+
+Also register in global socket layer:
+  ReceiveMessage(message)            // legacy name in chat.socket.ts — align one name
+  UserPresenceChanged(users[])       // { id, name, isOnline }
+
+Planned:
+  MessageEdited({ messageId, conversationId, content, editedAt })
+  MessageDeleted({ messageId, conversationId })
+  UserTyping({ conversationId, userId, isTyping: bool })
+  ConversationUpdated({ conversationId, chatname, ... })
+  MemberAdded({ conversationId, user })
+  MemberRemoved({ conversationId, userId })
+  MessagesRead({ conversationId, userId, lastReadMessageId })
+
+  -- Calling events --
+  IncomingCall({ callId, conversationId, callType, fromUserId })
+  CallAccepted({ callId })
+  CallRejected({ callId })
+  CallEnded({ callId })
+  CallSignal({ callId, signal })
+
+
+5. PAGINATION RECOMMENDATIONS
+--------------------------------------------------------------------------------
+Yes — pagination is required for production chat. Recommended strategy:
+
+5.1 Conversation list (sidebar)
+  Type   : Offset OR cursor by lastActivityAt
+  Recommend: Cursor-based infinite scroll
+  Params : ?cursor=<iso timestamp or conversationId>&pageSize=30
+  Why    : Users scroll down to load older chats; cursor avoids duplicates
+           when new messages arrive during pagination.
+
+5.2 Messages inside a conversation
+  Type   : Cursor-based (REQUIRED for chat UX)
+  Params : ?conversationId=&beforeMessageId=&pageSize=50
+           OR ?before=<sentAt ISO>&pageSize=50
+  Load   : Initial load = latest 50; scroll-up loads older pages
+  Why    : Standard pattern (WhatsApp/Slack); offset pagination breaks
+           when new messages append during fetch.
+
+5.3 User picker (New Chat)
+  Type   : Offset + search
+  Params : ?search=&page=1&pageSize=20
+  Why    : Admin-scale user lists; search debounced on frontend.
+
+5.4 Message search
+  Type   : Offset
+  Params : ?conversationId=&query=&page=&pageSize=20
+  Why    : Search results are static snapshots; offset is acceptable.
+
+5.5 Notifications list
+  Type   : Offset
+  Params : ?page=&pageSize=20
+
+
+6. ENCRYPTION (FUTURE — NOT IN CURRENT SCOPE)
+--------------------------------------------------------------------------------
+When the application is feature-complete, plan for:
+  - TLS in transit (already via HTTPS/WSS)
+  - Optional E2E encryption for message content (client-side keys)
+  - Encrypted attachment storage
+  - Key rotation and device management APIs
+
+No encryption APIs are required from backend until that phase begins.
+
+
+7. FRONTEND UI ACTIONS MAP (icons → backend)
+--------------------------------------------------------------------------------
+Header toolbar:
+  Search        → GET /Messages/Search
+  Voice call    → SignalR StartCall (audio) + call events
+  Video call    → SignalR StartCall (video) + WebRTC signaling
+  Info          → GET /Conversations/GetConversationDetails
+  Members       → GET /Conversations/GetMembers (groups only)
+  Mute          → POST /Conversations/Mute
+  Pin           → POST /Conversations/Pin
+  More          → Archive / Leave / Clear history endpoints
+
+Composer toolbar:
+  Attach        → POST /Messages/UploadAttachment
+  Emoji         → Client-side (optional GET /Emojis)
+  Voice note    → POST /Messages/UploadVoiceNote
+
+Sidebar toolbar:
+  Search chats  → GET /Conversations/Search
+  Settings      → GET/PUT /Users/Profile
+
+
+8. NOTES FOR BACKEND TEAM
+--------------------------------------------------------------------------------
+- Align SignalR event name: use MessageReceived OR ReceiveMessage consistently.
+- SendMessage should return/echo messageId for optimistic UI reconciliation.
+- Include sentAt (ISO 8601) on all message payloads.
+- CORS: allow frontend origin OR rely on Next.js rewrite proxy (current setup).
+- Rate-limit SendMessage and UploadAttachment to prevent abuse.
+
+================================================================================
+End of document
+================================================================================

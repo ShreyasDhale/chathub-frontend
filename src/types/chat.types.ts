@@ -1,3 +1,8 @@
+/**
+ * Shared domain types for conversations, users, and messages.
+ * See Backend_Requirements.txt for the full API contract.
+ */
+
 export type User = {
   id: string;
   name: string;

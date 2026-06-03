@@ -1,4 +1,6 @@
 import { ChatListItem } from "@/types/chat.types";
+import { SIDEBAR_ACTIONS } from "@/constants/chatActions";
+import ChatToolbar from "@/components/ui/ChatToolbar";
 
 type Props = {
   chats: ChatListItem[];
@@ -30,9 +32,12 @@ export default function ChatList({
           <div className="brand-icon">C</div>
           <h3>Chats</h3>
         </div>
-        <button className="menu-button" onClick={toggleMenu} aria-label="Menu">
-          ⋮
-        </button>
+        <div className="sidebar-header-actions">
+          <ChatToolbar actions={SIDEBAR_ACTIONS} compact />
+          <button className="menu-button" onClick={toggleMenu} aria-label="Menu">
+            ⋮
+          </button>
+        </div>
         {showMenu && (
           <>
             <button

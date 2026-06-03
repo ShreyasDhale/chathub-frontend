@@ -1,3 +1,9 @@
+/**
+ * Central HTTP client for all REST calls.
+ * - Reads JWT from localStorage via auth.storage
+ * - Uses NEXT_PUBLIC_API_BASE_URL (same-origin /api in dev via Next.js rewrite)
+ * - Surfaces backend Message field through toast notifications
+ */
 import toast from "react-hot-toast";
 import { DynamicApiResponse } from "@/types/api.types";
 import { getToken } from "@/utils/auth.storage";
@@ -8,6 +14,7 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   headers?: HeadersInit;
+  /** When false, caller handles errors inline (e.g. New Chat modal) */
   showToast?: boolean;
 };
 

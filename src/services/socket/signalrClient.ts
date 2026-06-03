@@ -3,6 +3,10 @@ import * as signalR from "@microsoft/signalr";
 let connection: signalR.HubConnection | null = null;
 let eventsRegistered = false;
 
+/**
+ * Creates a singleton SignalR connection authenticated with the JWT.
+ * Hub URL comes from NEXT_PUBLIC_SIGNALR_HUB_URL (/hubs/chat via proxy).
+ */
 export function createSignalRConnection(token: string) {
   if (connection) return connection;
 

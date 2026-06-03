@@ -1,12 +1,23 @@
 import { ChatListItem } from "@/types/chat.types";
+import { CHAT_HEADER_ACTIONS } from "@/constants/chatActions";
+import ChatToolbar from "@/components/ui/ChatToolbar";
 
 type Props = {
   chat?: ChatListItem;
   onBack?: () => void;
 };
 
+/**
+ * Active conversation top bar: avatar, title, and quick actions
+ * (search, call, info, members, etc.).
+ */
 export default function ChatHeader({ chat, onBack }: Props) {
   if (!chat) return null;
+
+  const headerActions = CHAT_HEADER_ACTIONS.filter(
+    (action) =>
+      chat.typecode === "GROUP" || action.id !== "group-members"
+  );
 
   return (
     <div className="chat-header">
@@ -31,6 +42,8 @@ export default function ChatHeader({ chat, onBack }: Props) {
           {chat.typecode === "GROUP" ? "Group" : "Direct"}
         </div>
       </div>
+
+      <ChatToolbar actions={headerActions} compact className="chat-header-actions" />
     </div>
   );
 }
