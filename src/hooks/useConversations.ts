@@ -1,48 +1,44 @@
-import { useEffect, useRef, useState } from "react";
-import { getSignalRConnection } from "@/services/socket/signalrClient";
+import { useEffect, useRef } from "react";
 import {
   joinConversation,
   leaveConversation,
 } from "@/services/socket/chat.actions";
+import { useConversationStore } from "@/store/conversation.store";
+import { loadchats } from "@/services/api/dashboard.api";
 
-export function useConversation(activeChatId: number | null) {
-  const [messages, setMessages] = useState<any[]>([]);
-  const previousChatId = useRef<number | null>(null);
-  const connection = getSignalRConnection();
+export function useConversations() {
+  const { conversations, setConversations, setActiveConversation, activeConversationId } =
+    useConversationStore();
+  const previousIdRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!activeChatId) return;
-
-    if (previousChatId.current) {
-      leaveConversation(previousChatId.current);
+  async function fetchConversations() {
+    try {
+      const res = await loadchats();
+      setConversations(res.Model ?? []);
+    } catch {
+      // silently fail
     }
-
-    joinConversation(activeChatId);
-    previousChatId.current = activeChatId;
-
-    return () => {
-      leaveConversation(activeChatId);
-    };
-  }, [activeChatId]);
-
-  useEffect(() => {
-    if (!connection) return;
-
-    const handler = (data: any) => {
-      setMessages((prev) => [...prev, data]);
-    };
-
-    connection.on("MessageReceived", handler);
-    return () => {
-      connection.off("MessageReceived", handler);
-    };
-  }, [connection]);
-
-  function sendMessage(message: string) {
-    if (!message.trim() || !activeChatId) return;
-    if (!connection) return;
-    connection.invoke("SendMessage", activeChatId, Date.now(), message);
   }
 
-  return { messages, sendMessage };
+  useEffect(() => {
+    fetchConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Join/leave SignalR groups when active conversation changes
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const prev = previousIdRef.current;
+    if (prev && prev !== activeConversationId) {
+      leaveConversation(prev);
+    }
+    joinConversation(activeConversationId);
+    previousIdRef.current = activeConversationId;
+
+    return () => {
+      leaveConversation(activeConversationId);
+    };
+  }, [activeConversationId]);
+
+  return { conversations, activeConversationId, setActiveConversation, fetchConversations };
 }

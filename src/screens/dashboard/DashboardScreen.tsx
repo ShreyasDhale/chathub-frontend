@@ -145,7 +145,11 @@ export default function DashboardScreen() {
               }}
             />
             <ChatBody messages={messages} activeChatId={activeChatId ?? 0} />
-            <ChatInput onSend={sendMessage} disabled={!connection} />
+            <ChatInput 
+              conversationId={activeChatId ?? 0}
+              onSend={sendMessage} 
+              disabled={!connection} 
+            />
           </>
         ) : (
           <div className="chat-placeholder">
