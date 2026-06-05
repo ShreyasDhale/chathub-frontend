@@ -11,6 +11,7 @@ import { startChat } from "@/services/api/chat.api";
 import { getUserId } from "@/utils/auth.storage";
 import { getApiErrorMessage, getRequestErrorMessage } from "@/utils/api.utils";
 import { UsersListItem } from "@/types/chat.types";
+import ChatIcon from "@/components/ui/ChatIcon";
 
 type Props = {
   open: boolean;
@@ -72,7 +73,12 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
           setUsers([]);
           return;
         }
-        const all = res.Model ?? [];
+        const model = res.Model;
+        const all: UsersListItem[] = Array.isArray(model)
+          ? model
+          : (model && typeof model === "object" && "Rows" in model
+              ? (model.Rows as UsersListItem[])
+              : []);
         setUsers(all.filter((u) => u.userid !== currentUserId));
       } catch (err) {
         setError(getRequestErrorMessage(err, "Failed to load users."));
@@ -162,7 +168,7 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
         onClick={() => setError("")}
         aria-label="Dismiss error"
       >
-        ×
+        <ChatIcon name="close" size={14} />
       </button>
     </div>
   ) : null;
@@ -187,14 +193,16 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
                 </p>
               </div>
               <button className="modal-close" onClick={onClose} aria-label="Close">
-                ×
+                <ChatIcon name="close" size={18} />
               </button>
             </div>
 
             {errorBanner}
 
             <div className="modal-search">
-              <span className="search-icon">⌕</span>
+              <span className="search-icon">
+                <ChatIcon name="search" size={16} />
+              </span>
               <input
                 type="text"
                 placeholder="Search by name or email..."
@@ -297,7 +305,7 @@ export default function NewChatModal({ open, onClose, onSuccess }: Props) {
                 onClick={() => setStep("select")}
                 aria-label="Back"
               >
-                ×
+                <ChatIcon name="back" size={18} />
               </button>
             </div>
 

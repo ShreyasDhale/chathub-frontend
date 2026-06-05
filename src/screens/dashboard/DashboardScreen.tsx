@@ -8,6 +8,8 @@ import { clearToken } from "@/utils/auth.storage";
 import {
   joinConversation,
   leaveConversation,
+  typingStarted,
+  typingStopped,
 } from "@/services/socket/chat.actions";
 import { getSignalRConnection } from "@/services/socket/signalrClient";
 import { ChatListItem } from "@/types/chat.types";
@@ -17,9 +19,15 @@ import ChatHeader from "@/components/ui/ChatHeader";
 import ChatBody from "@/components/ui/ChatBody";
 import ChatInput from "@/components/ui/ChatInput";
 import NewChatModal from "@/components/ui/NewChatModal";
+import ConversationInfoModal from "@/components/ui/ConversationInfoModal";
+import MembersModal from "@/components/ui/MembersModal";
+import InChatSearchPanel from "@/components/ui/InChatSearchPanel";
+import SettingsModal from "@/components/ui/SettingsModal";
+import CallManager from "@/components/ui/CallManager";
+import ChatIcon from "@/components/ui/ChatIcon";
 
 /**
- * Main chat dashboard: sidebar list + active conversation panel.
+ * Main chat dashboard: sidebar list + active conversation panel + global modals.
  * Real-time messages arrive via SignalR "MessageReceived" after JoinConversation.
  */
 export default function DashboardScreen() {
@@ -30,7 +38,13 @@ export default function DashboardScreen() {
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
+
+  // Modal/panel visibility
   const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showInChatSearch, setShowInChatSearch] = useState(false);
 
   const previousChatId = useRef<number | null>(null);
   const connection = getSignalRConnection();
@@ -54,29 +68,40 @@ export default function DashboardScreen() {
   /** Listen for inbound messages on the active hub connection. */
   useEffect(() => {
     if (!connection) return;
-
     const handler = (data: any) => {
       setMessages((prev) => [...prev, data]);
     };
-
     connection.on("MessageReceived", handler);
     return () => {
       connection.off("MessageReceived", handler);
     };
   }, [connection]);
 
-  /** Sends a text message through the SignalR hub (see Backend_Requirements.txt). */
+  /** Sends a text message through the SignalR hub. */
   function sendMessage(message: string) {
     if (!message.trim() || !activeChatId) return;
     if (!connection) return;
     connection.invoke("SendMessage", activeChatId, Date.now(), message);
   }
 
+  function handleTypingChange(typing: boolean) {
+    if (!activeChatId) return;
+    if (typing) typingStarted(activeChatId);
+    else typingStopped(activeChatId);
+  }
+
   async function fetchChats() {
     try {
       setLoading(true);
       const res = await loadchats();
-      setChats(res.Model ?? []);
+      const rows = res.Model as unknown;
+      const list: ChatListItem[] = Array.isArray(rows)
+        ? (rows as ChatListItem[])
+        : (rows && typeof rows === "object"
+            ? (((rows as { Rows?: ChatListItem[]; rows?: ChatListItem[] }).Rows ??
+                ((rows as { rows?: ChatListItem[] }).rows ?? [])) as ChatListItem[])
+            : []);
+      setChats(list);
     } finally {
       setLoading(false);
     }
@@ -103,6 +128,22 @@ export default function DashboardScreen() {
     router.replace("/login");
   }
 
+  function handleChatRemoved(conversationId: number) {
+    setChats((prev) => prev.filter((c) => c.conversationid !== conversationId));
+    if (activeChatId === conversationId) {
+      setActiveChatId(null);
+      setMessages([]);
+    }
+  }
+
+  function handleChatUpdated(updated: ChatListItem) {
+    setChats((prev) =>
+      prev.map((c) =>
+        c.conversationid === updated.conversationid ? { ...c, ...updated } : c
+      )
+    );
+  }
+
   const activeChat = chats.find((c) => c.conversationid === activeChatId);
 
   return (
@@ -124,6 +165,11 @@ export default function DashboardScreen() {
         onLogout={handleLogout}
         showMenu={showMenu}
         onNewChat={onNewChat}
+        onOpenSettings={() => {
+          setShowMenu(false);
+          setShowSettingsModal(true);
+        }}
+        onChatStarted={fetchChats}
         toggleMenu={() => setShowMenu((v) => !v)}
         onCloseMenu={() => setShowMenu(false)}
       />
@@ -134,28 +180,84 @@ export default function DashboardScreen() {
         onSuccess={handleChatCreated}
       />
 
+      <ConversationInfoModal
+        open={showInfoModal}
+        chat={activeChat ?? null}
+        onClose={() => setShowInfoModal(false)}
+        onRenamed={(id, newName) => {
+          handleChatUpdated({
+            ...(activeChat as ChatListItem),
+            conversationid: id,
+            chatname: newName,
+          });
+        }}
+      />
+
+      <MembersModal
+        open={showMembersModal}
+        chat={activeChat ?? null}
+        onClose={() => setShowMembersModal(false)}
+      />
+
+      <SettingsModal
+        open={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+      />
+
+      <CallManager />
+
       <main className="chat-area">
         {activeChat ? (
-          <>
-            <ChatHeader
-              chat={activeChat}
-              onBack={() => {
-                setActiveChatId(null);
-                setMessages([]);
-              }}
+          showInChatSearch ? (
+            <InChatSearchPanel
+              conversationId={activeChat.conversationid}
+              onClose={() => setShowInChatSearch(false)}
             />
-            <ChatBody messages={messages} activeChatId={activeChatId ?? 0} />
-            <ChatInput 
-              conversationId={activeChatId ?? 0}
-              onSend={sendMessage} 
-              disabled={!connection} 
-            />
-          </>
+          ) : (
+            <>
+              <ChatHeader
+                chat={activeChat}
+                onBack={() => {
+                  setActiveChatId(null);
+                  setMessages([]);
+                }}
+                onOpenInfo={() => setShowInfoModal(true)}
+                onOpenMembers={() => setShowMembersModal(true)}
+                onOpenSearch={() => setShowInChatSearch(true)}
+                onChatRemoved={handleChatRemoved}
+                onChatUpdated={handleChatUpdated}
+              />
+              <ChatBody
+                messages={messages}
+                activeChatId={activeChatId ?? 0}
+              />
+              <ChatInput
+                conversationId={activeChatId ?? 0}
+                onSend={sendMessage}
+                disabled={!connection}
+                onTypingChange={handleTypingChange}
+              />
+            </>
+          )
         ) : (
           <div className="chat-placeholder">
-            <div className="chat-placeholder-icon">💬</div>
-            <span className="chat-placeholder-text">Select a chat to start messaging</span>
-            <span className="chat-placeholder-hint">Or create a new chat from the menu</span>
+            <div className="chat-placeholder-icon">
+              <ChatIcon name="newChat" size={36} />
+            </div>
+            <span className="chat-placeholder-text">
+              Welcome to ChatHub
+            </span>
+            <span className="chat-placeholder-hint">
+              Select a chat from the sidebar or start a new conversation
+            </span>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={onNewChat}
+              style={{ marginTop: 18 }}
+            >
+              + New conversation
+            </button>
           </div>
         )}
       </main>

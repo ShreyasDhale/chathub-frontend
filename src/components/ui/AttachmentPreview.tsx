@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Download, X } from "lucide-react";
 import { Attachment } from "@/types/chat.types";
 import {
   useAttachmentPreview,
@@ -9,6 +8,7 @@ import {
 } from "@/hooks/useAttachmentPreview";
 import { downloadAttachment } from "@/services/api/attachments.api";
 import { VoiceNotePlayer } from "./VoiceNotePlayer";
+import ChatIcon from "@/components/ui/ChatIcon";
 
 interface AttachmentPreviewProps {
   attachment: Attachment;
@@ -27,64 +27,41 @@ export function AttachmentPreview({
   const preview = useAttachmentPreview(attachment);
   const previewUrl = useAttachmentPreviewUrl(attachment);
 
-  const handleDownload = () => {
+  function handleDownload() {
     downloadAttachment(attachment.attachmentId, attachment.fileName);
-  };
+  }
 
-  // Voice notes use dedicated player
   if (preview.isAudio) {
     return <VoiceNotePlayer attachment={attachment} isOwn={isOwn} />;
   }
 
-  // Image preview
   if (preview.isImage) {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="relative group">
+      <div className="attach-card">
+        <div className="attach-card-media">
           <img
             src={previewUrl || attachment.url}
             alt={attachment.fileName}
             onClick={() => setIsExpanded(true)}
-            className="max-w-sm max-h-96 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+            className="attach-image"
           />
-          <div className="absolute inset-0 rounded-lg bg-black opacity-0 group-hover:opacity-10 transition-opacity" />
         </div>
-
-        {/* Image info bar */}
-        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-          <span className="truncate">{attachment.fileName}</span>
-          <div className="flex gap-2">
-            {showDownload && (
-              <button
-                onClick={handleDownload}
-                title="Download"
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-            {onRemove && (
-              <button
-                onClick={onRemove}
-                title="Remove"
-                className="p-1 hover:bg-red-200 dark:hover:bg-red-900 rounded"
-              >
-                <X className="w-4 h-4 text-red-500" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Expanded view modal */}
+        <AttachmentMeta
+          name={attachment.fileName}
+          showDownload={showDownload}
+          onDownload={handleDownload}
+          onRemove={onRemove}
+        />
         {isExpanded && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
+            className="attach-lightbox"
             onClick={() => setIsExpanded(false)}
+            role="dialog"
           >
             <img
               src={previewUrl || attachment.url}
               alt={attachment.fileName}
-              className="max-w-full max-h-full rounded-lg"
+              className="attach-lightbox-img"
               onClick={(e) => e.stopPropagation()}
             />
           </div>
@@ -93,79 +70,96 @@ export function AttachmentPreview({
     );
   }
 
-  // Video preview
   if (preview.isVideo) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="attach-card">
         <video
           src={previewUrl || attachment.url}
           controls
-          className="max-w-sm max-h-96 rounded-lg bg-black"
+          className="attach-video"
         />
-        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-          <span className="truncate">{attachment.fileName}</span>
-          <div className="flex gap-2">
-            {showDownload && (
-              <button
-                onClick={handleDownload}
-                title="Download"
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-            {onRemove && (
-              <button
-                onClick={onRemove}
-                title="Remove"
-                className="p-1 hover:bg-red-200 dark:hover:bg-red-900 rounded"
-              >
-                <X className="w-4 h-4 text-red-500" />
-              </button>
-            )}
-          </div>
-        </div>
+        <AttachmentMeta
+          name={attachment.fileName}
+          showDownload={showDownload}
+          onDownload={handleDownload}
+          onRemove={onRemove}
+        />
       </div>
     );
   }
 
-  // Document/generic file preview
   return (
-    <div
-      className={`flex items-center gap-3 p-3 rounded-lg border ${
-        isOwn
-          ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-          : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-      }`}
-    >
-      <div className="text-2xl flex-shrink-0">{preview.icon}</div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
-          {attachment.fileName}
-        </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400">
-          {preview.fileSize}
-        </p>
+    <div className={`attach-doc ${isOwn ? "is-own" : ""}`}>
+      <div className="attach-doc-icon" aria-hidden="true">
+        {preview.icon}
       </div>
-
-      <div className="flex gap-1 flex-shrink-0">
+      <div className="attach-doc-info">
+        <p className="attach-doc-name">{attachment.fileName}</p>
+        <p className="attach-doc-size">{preview.fileSize}</p>
+      </div>
+      <div className="attach-doc-actions">
         {showDownload && (
           <button
+            type="button"
+            className="chat-icon-button"
             onClick={handleDownload}
             title="Download"
-            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+            aria-label="Download"
           >
-            <Download className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+            <ChatIcon name="attach" size={16} />
           </button>
         )}
         {onRemove && (
           <button
+            type="button"
+            className="chat-icon-button"
             onClick={onRemove}
             title="Remove"
-            className="p-2 hover:bg-red-200 dark:hover:bg-red-900 rounded transition-colors"
+            aria-label="Remove"
           >
-            <X className="w-4 h-4 text-red-500" />
+            <ChatIcon name="close" size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentMeta({
+  name,
+  showDownload,
+  onDownload,
+  onRemove,
+}: {
+  name: string;
+  showDownload: boolean;
+  onDownload: () => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="attach-meta">
+      <span className="attach-meta-name">{name}</span>
+      <div className="attach-meta-actions">
+        {showDownload && (
+          <button
+            type="button"
+            className="chat-icon-button"
+            onClick={onDownload}
+            title="Download"
+            aria-label="Download"
+          >
+            <ChatIcon name="attach" size={14} />
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            className="chat-icon-button"
+            onClick={onRemove}
+            title="Remove"
+            aria-label="Remove"
+          >
+            <ChatIcon name="close" size={14} />
           </button>
         )}
       </div>

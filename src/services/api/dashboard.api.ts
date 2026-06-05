@@ -4,16 +4,16 @@ import { ChatListItem, UsersListItem } from "@/types/chat.types";
 
 /** Loads the authenticated user's conversation sidebar list. */
 export function loadchats() {
-  return apiRequest<DynamicApiResponse<ChatListItem[], null>>(
+  return apiRequest<DynamicApiResponse<ChatListItem[] | { Rows: ChatListItem[] }, null>>(
     "/Conversations/GetUserConversations",
-    { method: "GET" }
+    { method: "GET", showToast: false }
   );
 }
 
 /** Loads all users for the New Chat picker (current user filtered client-side). */
 export function loadusers() {
-  return apiRequest<DynamicApiResponse<UsersListItem[], null>>(
+  return apiRequest<DynamicApiResponse<UsersListItem[] | { Rows: UsersListItem[] }, null>>(
     "/Users/GetAllUsers",
-    { method: "GET" }
+    { method: "GET", showToast: false }
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Paperclip, Loader } from "lucide-react";
+import ChatIcon from "@/components/ui/ChatIcon";
 import { AttachmentResponse } from "@/services/api/attachments.api";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
@@ -30,7 +30,6 @@ export function AttachmentPicker({
     try {
       const attachment = await upload(file, conversationId);
       onAttachmentSelected?.(attachment);
-      // Reset input
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -48,21 +47,19 @@ export function AttachmentPicker({
   };
 
   return (
-    <div className="relative">
+    <div className="attachment-picker">
       <button
+        type="button"
+        className="chat-icon-button"
         onClick={handleClick}
         disabled={disabled || isLoading}
-        title={isLoading ? `Uploading... ${Math.round(progress)}%` : "Attach file"}
-        className={`p-2 rounded-lg transition-colors ${
-          disabled || isLoading
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-gray-100 dark:hover:bg-gray-700"
-        }`}
+        title={isLoading ? `Uploading ${Math.round(progress)}%` : "Attach file"}
+        aria-label="Attach file"
       >
         {isLoading ? (
-          <Loader className="w-5 h-5 animate-spin text-blue-500" />
+          <span className="upload-spinner" aria-hidden="true" />
         ) : (
-          <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <ChatIcon name="attach" size={18} />
         )}
       </button>
 
@@ -71,20 +68,14 @@ export function AttachmentPicker({
         type="file"
         onChange={handleFileChange}
         disabled={disabled || isLoading}
-        className="hidden"
+        className="visually-hidden"
         accept="*/*"
       />
 
-      {error && (
-        <div className="absolute bottom-full mb-2 bg-red-500 text-white text-xs py-1 px-2 rounded whitespace-nowrap">
-          {error}
-        </div>
-      )}
+      {error && <div className="attachment-error">{error}</div>}
 
       {isLoading && progress > 0 && (
-        <div className="absolute bottom-full mb-2 bg-blue-500 text-white text-xs py-1 px-2 rounded">
-          {Math.round(progress)}%
-        </div>
+        <div className="attachment-progress">{Math.round(progress)}%</div>
       )}
     </div>
   );

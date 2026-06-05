@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Mic, MicOff, Video, VideoOff } from "lucide-react";
+import ChatIcon from "@/components/ui/ChatIcon";
 
 interface VideoStreamProps {
   stream: MediaStream | null;
@@ -25,8 +25,8 @@ export function VideoStream({
   muted = false,
 }: VideoStreamProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hasVideo = stream?.getVideoTracks().length ?? 0 > 0;
-  const hasAudio = stream?.getAudioTracks().length ?? 0 > 0;
+  const hasVideo = (stream?.getVideoTracks().length ?? 0) > 0 && videoEnabled;
+  const hasAudio = (stream?.getAudioTracks().length ?? 0) > 0;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -45,80 +45,56 @@ export function VideoStream({
   }, [stream]);
 
   return (
-    <div className="relative w-full h-full bg-black rounded-lg overflow-hidden group">
+    <div className="video-stream">
       {hasVideo ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={muted || isLocal}
-          className="w-full h-full object-cover"
+          className="video-stream-video"
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
-          <div className="text-center">
-            <div className="text-4xl mb-2">👤</div>
-            <p className="text-white text-sm">{userName || "User"}</p>
-            <p className="text-gray-400 text-xs mt-1">Camera off</p>
+        <div className="video-stream-placeholder">
+          <div className="video-stream-avatar">
+            <ChatIcon name="user" size={28} />
           </div>
+          <p className="video-stream-name">{userName || "User"}</p>
+          <p className="video-stream-hint">Camera off</p>
         </div>
       )}
 
-      {/* Controls overlay */}
       {isLocal && (
-        <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between">
-          <div className="p-3">
-            <div className="text-white text-xs font-semibold">You</div>
-          </div>
-
-          <div className="flex justify-center gap-2 p-3">
-            {hasAudio && (
-              <button
-                onClick={onToggleAudio}
-                className={`p-2 rounded-full transition-colors ${
-                  audioEnabled
-                    ? "bg-gray-600 hover:bg-gray-700"
-                    : "bg-red-600 hover:bg-red-700"
-                }`}
-              >
-                {audioEnabled ? (
-                  <Mic className="w-4 h-4 text-white" />
-                ) : (
-                  <MicOff className="w-4 h-4 text-white" />
-                )}
-              </button>
-            )}
-
-            {hasVideo && (
-              <button
-                onClick={onToggleVideo}
-                className={`p-2 rounded-full transition-colors ${
-                  videoEnabled
-                    ? "bg-gray-600 hover:bg-gray-700"
-                    : "bg-red-600 hover:bg-red-700"
-                }`}
-              >
-                {videoEnabled ? (
-                  <Video className="w-4 h-4 text-white" />
-                ) : (
-                  <VideoOff className="w-4 h-4 text-white" />
-                )}
-              </button>
-            )}
-          </div>
+        <div className="video-stream-controls">
+          {hasAudio && onToggleAudio && (
+            <button
+              type="button"
+              className={`call-control ${audioEnabled ? "" : "is-off"}`}
+              onClick={onToggleAudio}
+              aria-label={audioEnabled ? "Mute" : "Unmute"}
+            >
+              <ChatIcon name={audioEnabled ? "voice" : "mic-off"} size={16} />
+            </button>
+          )}
+          {(stream?.getVideoTracks().length ?? 0) > 0 && onToggleVideo && (
+            <button
+              type="button"
+              className={`call-control ${videoEnabled ? "" : "is-off"}`}
+              onClick={onToggleVideo}
+              aria-label={videoEnabled ? "Stop video" : "Start video"}
+            >
+              <ChatIcon name={videoEnabled ? "video" : "video-off"} size={16} />
+            </button>
+          )}
         </div>
       )}
 
-      {/* User info badge */}
-      {!isLocal && (
-        <div className="absolute top-3 left-3 bg-black bg-opacity-60 px-2 py-1 rounded text-white text-xs font-medium">
-          {userName || "Remote User"}
-        </div>
+      {!isLocal && userName && (
+        <div className="video-stream-tag">{userName}</div>
       )}
 
-      {/* Audio indicator (when video is off) */}
       {!hasVideo && hasAudio && !isLocal && (
-        <div className="absolute bottom-3 right-3 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <div className="video-stream-audio-dot" />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 @import "./theme.css";
 @import "./auth.css";
 @import "./dashboard.css";
+@import "./components.css";
 
 *,
 *::before,

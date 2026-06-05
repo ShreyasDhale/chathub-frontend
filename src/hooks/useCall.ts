@@ -163,7 +163,7 @@ export function useCall(conversationId: number, userId: number) {
       await connection.invoke("RejectCall", incomingCall.callId);
       setIncomingCall(null);
       setIncomingCallRinging(false);
-      toast.info("Call rejected");
+      toast("Call rejected");
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       toast.error("Failed to reject call: " + err.message);

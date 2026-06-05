@@ -1,156 +1,170 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useCallStore } from "@/store/call.store";
 import { VideoStream } from "./VideoStream";
+import ChatIcon from "@/components/ui/ChatIcon";
 
-interface ActiveCallScreenProps {
+type Props = {
   onHangUp?: () => void;
-}
+};
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function ActiveCallScreen({ onHangUp }: ActiveCallScreenProps) {
-  const { activeCall, localStream, remoteStreams, audioEnabled, videoEnabled, toggleAudio, toggleVideo } =
-    useWebRTC();
+export function ActiveCallScreen({ onHangUp }: Props) {
+  const {
+    activeCall,
+    localStream,
+    remoteStreams,
+    audioEnabled,
+    videoEnabled,
+    toggleAudio,
+    toggleVideo,
+  } = useWebRTC();
   const { callStatus } = useCallStore();
   const [duration, setDuration] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Track call duration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (callStatus !== "connected") return;
-
     const interval = setInterval(() => {
       setDuration((d) => d + 1);
     }, 1000);
-
     return () => clearInterval(interval);
   }, [callStatus]);
 
-  if (!activeCall) {
-    return null;
-  }
+  useEffect(() => {
+    if (!activeCall) {
+      setDuration(0);
+      setIsFullscreen(false);
+    }
+  }, [activeCall]);
+
+  if (!activeCall || !mounted) return null;
 
   const remoteStream = remoteStreams[0];
-  const callTypeIcon = activeCall.callType === "video" ? "📹" : "☎️";
+  const isVideo = activeCall.callType === "video";
+  const remoteName =
+    remoteStream?.userName ?? activeCall.fromUserName ?? "Connected";
+  const initials = remoteName.charAt(0).toUpperCase();
 
-  return (
+  const overlay = (
     <div
-      className={`fixed z-40 bg-black text-white ${
-        isFullscreen ? "inset-0" : "bottom-4 right-4 w-96 h-96 rounded-lg shadow-2xl"
-      }`}
+      className={`call-screen ${isFullscreen ? "is-fullscreen" : ""}`}
+      role="dialog"
+      aria-modal="true"
     >
-      {/* Status bar */}
-      <div className="absolute top-0 inset-x-0 flex items-center justify-between px-4 py-3 bg-black bg-opacity-60 z-50">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{callTypeIcon}</span>
+      <div className="call-screen-header">
+        <div className="call-screen-info">
+          <div className="call-screen-avatar-sm">{initials}</div>
           <div>
-            <p className="font-semibold">
-              {remoteStream?.userName || "User"}
+            <p className="call-screen-name">{remoteName}</p>
+            <p className="call-screen-status">
+              {callStatus === "connecting"
+                ? "Connecting..."
+                : formatDuration(duration)}
             </p>
-            <p className="text-xs text-gray-300">{formatDuration(duration)}</p>
           </div>
         </div>
-
         <button
-          onClick={() => setIsFullscreen(!isFullscreen)}
-          className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-lg"
-          title="Toggle fullscreen"
+          type="button"
+          className="call-screen-iconbtn"
+          onClick={() => setIsFullscreen((v) => !v)}
+          title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          aria-label="Toggle fullscreen"
         >
-          🔲
+          <ChatIcon name={isFullscreen ? "compress" : "expand"} size={18} />
         </button>
       </div>
 
-      {/* Video grid */}
-      <div className="absolute inset-x-0 top-14 bottom-20 flex gap-2 p-2">
-        {/* Remote stream (main) */}
-        {remoteStream && activeCall.callType === "video" ? (
-          <div className="flex-1 rounded-lg overflow-hidden">
+      <div className="call-screen-stage">
+        {isVideo && remoteStream ? (
+          <div className="call-screen-remote">
             <VideoStream
               stream={remoteStream.stream}
-              userName={remoteStream.userName}
+              userName={remoteName}
               isLocal={false}
               muted={false}
             />
           </div>
         ) : (
-          <div className="flex-1 rounded-lg bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-6xl mb-4">👤</div>
-              <p className="text-lg font-semibold">
-                {remoteStream?.userName || "User"}
-              </p>
-              <p className="text-sm text-gray-400 mt-2">
-                {callStatus === "connecting"
-                  ? "Connecting..."
-                  : "Call in progress"}
-              </p>
-            </div>
+          <div className="call-screen-portrait">
+            <div className="call-screen-portrait-avatar">{initials}</div>
+            <p className="call-screen-portrait-name">{remoteName}</p>
+            <p className="call-screen-portrait-hint">
+              {callStatus === "connecting"
+                ? "Connecting..."
+                : isVideo
+                  ? "Waiting for video..."
+                  : "Voice call in progress"}
+            </p>
           </div>
         )}
 
-        {/* Local stream (picture-in-picture) */}
-        {activeCall.callType === "video" && localStream && (
-          <div className="w-32 rounded-lg overflow-hidden shadow-lg">
+        {isVideo && localStream && (
+          <div className="call-screen-local">
             <VideoStream
               stream={localStream}
               userName="You"
-              isLocal={true}
+              isLocal
               audioEnabled={audioEnabled}
               videoEnabled={videoEnabled}
-              muted={true}
+              muted
             />
           </div>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 px-4 py-4 bg-black bg-opacity-60">
+      <div className="call-screen-controls">
         <button
+          type="button"
+          className={`call-control ${audioEnabled ? "" : "is-off"}`}
           onClick={toggleAudio}
-          className={`p-3 rounded-full transition-colors text-xl ${
-            audioEnabled
-              ? "bg-gray-600 hover:bg-gray-700"
-              : "bg-red-600 hover:bg-red-700"
-          }`}
-          title={audioEnabled ? "Mute" : "Unmute"}
+          title={audioEnabled ? "Mute mic" : "Unmute mic"}
+          aria-label={audioEnabled ? "Mute" : "Unmute"}
         >
-          {audioEnabled ? "🔊" : "🔇"}
+          <ChatIcon name={audioEnabled ? "voice" : "mic-off"} size={22} />
         </button>
 
-        {activeCall.callType === "video" && (
+        {isVideo && (
           <button
+            type="button"
+            className={`call-control ${videoEnabled ? "" : "is-off"}`}
             onClick={toggleVideo}
-            className={`p-3 rounded-full transition-colors text-xl ${
-              videoEnabled
-                ? "bg-gray-600 hover:bg-gray-700"
-                : "bg-red-600 hover:bg-red-700"
-            }`}
             title={videoEnabled ? "Stop video" : "Start video"}
+            aria-label={videoEnabled ? "Stop video" : "Start video"}
           >
-            {videoEnabled ? "📹" : "📵"}
+            <ChatIcon name={videoEnabled ? "video" : "video-off"} size={22} />
           </button>
         )}
 
         <button
-          onClick={onHangUp}
-          className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-colors ml-2 text-xl"
+          type="button"
+          className="call-control call-control--hangup"
+          onClick={() => onHangUp?.()}
           title="End call"
+          aria-label="End call"
         >
-          ☎️
+          <ChatIcon name="phone-down" size={22} />
         </button>
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

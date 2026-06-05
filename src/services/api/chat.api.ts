@@ -15,23 +15,23 @@ export function startChat(payload: StartChatRequest) {
   );
 }
 
-/** GET /Conversations/GetConversationDetails/{id} */
+/** GET /Conversations/GetConversationDetails/{id} — backend returns a DataTable serialized either as `{ Rows: [...] }` or as an array of rows. */
 export function getConversationDetails(conversationId: number) {
-  return apiRequest<DynamicApiResponse<ConversationDetail, null>>(
+  return apiRequest<DynamicApiResponse<ConversationDetail | ConversationDetail[] | { Rows: ConversationDetail[] }, null>>(
     `/Conversations/GetConversationDetails/${conversationId}`,
     { method: "GET", showToast: false }
   );
 }
 
-/** GET /Conversations/GetMembers/{id} */
+/** GET /Conversations/GetMembers/{id} — backend returns a DataTable. */
 export function getConversationMembers(conversationId: number) {
-  return apiRequest<DynamicApiResponse<ConversationMember[], null>>(
+  return apiRequest<DynamicApiResponse<ConversationMember[] | { Rows: ConversationMember[] }, null>>(
     `/Conversations/GetMembers/${conversationId}`,
     { method: "GET", showToast: false }
   );
 }
 
-/** GET /Conversations/Search?query=&cursor=&pageSize= */
+/** GET /Conversations/Search?query=&cursor=&pageSize= — backend returns a DataTable. */
 export function searchConversations(
   query: string,
   cursor?: string,
@@ -39,7 +39,7 @@ export function searchConversations(
 ) {
   const params = new URLSearchParams({ query, pageSize: pageSize.toString() });
   if (cursor) params.set("cursor", cursor);
-  return apiRequest<DynamicApiResponse<ChatListItem[], null>>(
+  return apiRequest<DynamicApiResponse<ChatListItem[] | { Rows: ChatListItem[] }, null>>(
     `/Conversations/Search?${params}`,
     { method: "GET", showToast: false }
   );
@@ -72,13 +72,16 @@ export function archiveConversation(conversationId: number) {
   });
 }
 
-/** DELETE /Conversations/Leave */
+/** DELETE /Conversations/Leave?conversationId= */
 export function leaveConversationRest(conversationId: number) {
-  return apiRequest<DynamicApiResponse<null, null>>("/Conversations/Leave", {
-    method: "DELETE",
-    body: { ConversationId: conversationId },
-    showToast: true,
-  });
+  const params = new URLSearchParams({ conversationId: conversationId.toString() });
+  return apiRequest<DynamicApiResponse<null, null>>(
+    `/Conversations/Leave?${params}`,
+    {
+      method: "DELETE",
+      showToast: true,
+    }
+  );
 }
 
 /** PUT /Conversations/Rename */
@@ -102,13 +105,16 @@ export function addMembers(conversationId: number, members: number[]) {
   );
 }
 
-/** DELETE /Conversations/RemoveMember */
+/** DELETE /Conversations/RemoveMember?conversationId=&userId= */
 export function removeMember(conversationId: number, userId: number) {
+  const params = new URLSearchParams({
+    conversationId: conversationId.toString(),
+    userId: userId.toString(),
+  });
   return apiRequest<DynamicApiResponse<null, null>>(
-    "/Conversations/RemoveMember",
+    `/Conversations/RemoveMember?${params}`,
     {
       method: "DELETE",
-      body: { ConversationId: conversationId, UserId: userId },
       showToast: true,
     }
   );

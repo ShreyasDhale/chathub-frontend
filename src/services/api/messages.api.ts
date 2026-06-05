@@ -20,13 +20,13 @@ export function getByConversation({
   });
   if (beforeMessageId) params.set("beforeMessageId", beforeMessageId.toString());
 
-  return apiRequest<DynamicApiResponse<MessageRow[], null>>(
+  return apiRequest<DynamicApiResponse<MessageRow[] | { Rows: MessageRow[] }, null>>(
     `/Messages/GetByConversation?${params}`,
     { method: "GET", showToast: false }
   );
 }
 
-/** GET /Messages/Search?conversationId=&query=&page=&pageSize= */
+/** GET /Messages/Search?conversationId=&query=&page=&pageSize= — backend returns a DataTable. */
 export function searchMessages(
   conversationId: number,
   query: string,
@@ -39,7 +39,7 @@ export function searchMessages(
     page: page.toString(),
     pageSize: pageSize.toString(),
   });
-  return apiRequest<DynamicApiResponse<MessageRow[], null>>(
+  return apiRequest<DynamicApiResponse<MessageRow[] | { Rows: MessageRow[] }, null>>(
     `/Messages/Search?${params}`,
     { method: "GET", showToast: false }
   );

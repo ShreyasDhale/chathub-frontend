@@ -1,6 +1,7 @@
 "use client";
 
-import { Phone, Clock, Calendar } from "lucide-react";
+import { createPortal } from "react-dom";
+import ChatIcon from "@/components/ui/ChatIcon";
 
 interface CallEndedModalProps {
   userName: string;
@@ -14,25 +15,18 @@ function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secs}s`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  }
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
   return `${secs}s`;
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString([], {
+function formatStamp(date: Date): string {
+  return date.toLocaleString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -43,74 +37,69 @@ export function CallEndedModal({
   reason = "completed",
   onClose,
 }: CallEndedModalProps) {
-  const now = new Date();
-  const callTypeLabel = callType === "video" ? "Video call" : "Voice call";
-  const callTypeIcon = callType === "video" ? "📹" : "☎️";
+  const isVideo = callType === "video";
+  const callTypeLabel = isVideo ? "Video call" : "Voice call";
 
-  let statusText = "Call ended";
-  let statusColor = "text-gray-600";
+  const statusMap: Record<NonNullable<CallEndedModalProps["reason"]>, { label: string; tone: string }> = {
+    completed: { label: "Call ended", tone: "neutral" },
+    rejected: { label: "Call was declined", tone: "danger" },
+    missed: { label: "Missed call", tone: "warning" },
+    failed: { label: "Call failed", tone: "danger" },
+  };
+  const status = statusMap[reason];
 
-  switch (reason) {
-    case "rejected":
-      statusText = "Call was rejected";
-      statusColor = "text-red-600";
-      break;
-    case "missed":
-      statusText = "Missed call";
-      statusColor = "text-yellow-600";
-      break;
-    case "failed":
-      statusText = "Call failed";
-      statusColor = "text-red-600";
-      break;
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-8 max-w-sm w-full mx-4">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="text-6xl mb-4">{callTypeIcon}</div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {userName}
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {callTypeLabel}
-          </p>
-          <p className={`text-sm mt-2 font-medium ${statusColor}`}>
-            {statusText}
-          </p>
+  const modal = (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="info-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="modal-header">
+          <div>
+            <h2>{callTypeLabel}</h2>
+            <p className="modal-subtitle">{status.label}</p>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <ChatIcon name="close" size={18} />
+          </button>
         </div>
 
-        {/* Call details */}
-        <div className="space-y-3 mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          {reason !== "missed" && reason !== "rejected" && reason !== "failed" && (
-            <div className="flex items-center gap-3 text-sm">
-              <Clock className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-              <span className="text-gray-900 dark:text-white">
-                Duration: <span className="font-semibold">{formatDuration(duration)}</span>
-              </span>
+        <div className="info-hero">
+          <div className="info-hero-avatar">
+            {userName.charAt(0).toUpperCase()}
+          </div>
+          <h3 className="info-hero-name">{userName}</h3>
+          <span className={`info-hero-type ${status.tone === "danger" ? "is-danger" : ""}`}>
+            {status.label}
+          </span>
+        </div>
+
+        <div className="info-list">
+          {reason === "completed" && (
+            <div className="info-row">
+              <span className="info-row-label">Duration</span>
+              <span className="info-row-value">{formatDuration(duration)}</span>
             </div>
           )}
-
-          <div className="flex items-center gap-3 text-sm">
-            <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-            <span className="text-gray-900 dark:text-white">
-              <span className="font-semibold">{formatDate(now)}</span> at{" "}
-              <span className="font-semibold">{formatTime(now)}</span>
-            </span>
+          <div className="info-row">
+            <span className="info-row-label">Time</span>
+            <span className="info-row-value">{formatStamp(new Date())}</span>
           </div>
         </div>
 
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="w-full px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors"
-        >
-          <Phone className="w-5 h-5 inline mr-2" />
-          Done
-        </button>
+        <div className="modal-footer">
+          <span />
+          <div className="modal-footer-actions">
+            <button className="btn-primary" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

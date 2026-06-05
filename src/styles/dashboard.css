@@ -261,9 +261,15 @@ body {
 }
 
 .sidebar-empty-icon {
-  font-size: 40px;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 12px;
-  opacity: 0.6;
 }
 
 .sidebar-empty p {
@@ -370,7 +376,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40px;
+  color: var(--color-primary);
   box-shadow: var(--glass-shadow);
   margin-bottom: 4px;
 }

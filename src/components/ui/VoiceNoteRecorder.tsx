@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Mic, Send, X, Pause, Play } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { uploadVoiceNote } from "@/services/api/attachments.api";
+import ChatIcon from "@/components/ui/ChatIcon";
 import toast from "react-hot-toast";
 
 interface VoiceNoteRecorderProps {
@@ -40,11 +40,10 @@ export function VoiceNoteRecorder({
 
   const handleSend = async () => {
     if (!audioBlob) return;
-
     setIsSending(true);
     try {
       await uploadVoiceNote(audioBlob, conversationId);
-      toast.success("Voice note sent!");
+      toast.success("Voice note sent");
       onVoiceNoteSent?.();
       setIsOpen(false);
       cancelRecording();
@@ -61,83 +60,90 @@ export function VoiceNoteRecorder({
   if (!isOpen) {
     return (
       <button
+        type="button"
+        className="chat-icon-button"
         onClick={() => setIsOpen(true)}
         title="Record voice note"
-        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        aria-label="Record voice note"
       >
-        <Mic className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+        <ChatIcon name="voice" size={18} />
       </button>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Record Voice Note</h3>
+    <div className="voice-recorder">
+      <div className="voice-recorder-header">
+        <span className="voice-recorder-title">
+          <ChatIcon name="voice" size={16} />
+          Voice note
+        </span>
         <button
+          type="button"
+          className="chat-icon-button"
           onClick={() => {
             setIsOpen(false);
             cancelRecording();
           }}
-          className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          aria-label="Close"
         >
-          <X className="w-4 h-4" />
+          <ChatIcon name="close" size={16} />
         </button>
       </div>
 
-      {/* Recording Display */}
-      <div className="flex items-center justify-center gap-3 py-4">
+      <div className="voice-recorder-status">
         {isRecording && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-sm font-mono text-red-500">
-              {formatDuration(duration)}
-            </span>
+          <div className="voice-recorder-rec">
+            <span className="rec-dot" />
+            <span className="rec-time">{formatDuration(duration)}</span>
+            {isPaused && <span className="rec-paused">Paused</span>}
           </div>
         )}
         {audioBlob && !isRecording && (
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            ✓ Ready to send • {formatDuration(duration)}
+          <span className="voice-recorder-ready">
+            <ChatIcon name="check" size={14} /> Ready · {formatDuration(duration)}
           </span>
         )}
-        {error && (
-          <span className="text-sm text-red-500">{error}</span>
+        {error && <span className="voice-recorder-error">{error}</span>}
+        {!isRecording && !audioBlob && !error && (
+          <span className="voice-recorder-hint">Tap start to record</span>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex gap-2">
+      <div className="voice-recorder-controls">
         {!isRecording && !audioBlob && (
           <button
+            type="button"
+            className="btn-primary"
             onClick={startRecording}
-            className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
           >
-            <Mic className="w-4 h-4 inline mr-2" />
-            Start Recording
+            Start
           </button>
         )}
 
         {isRecording && (
           <>
+            {!isPaused ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={pauseRecording}
+              >
+                Pause
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resumeRecording}
+              >
+                Resume
+              </button>
+            )}
             <button
-              onClick={pauseRecording}
-              disabled={isPaused}
-              className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50 text-sm font-medium"
-            >
-              <Pause className="w-4 h-4 inline mr-2" />
-              Pause
-            </button>
-            <button
-              onClick={resumeRecording}
-              disabled={!isPaused}
-              className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 text-sm font-medium"
-            >
-              <Play className="w-4 h-4 inline mr-2" />
-              Resume
-            </button>
-            <button
+              type="button"
+              className="btn-primary"
               onClick={stopRecording}
-              className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
             >
               Stop
             </button>
@@ -147,18 +153,19 @@ export function VoiceNoteRecorder({
         {audioBlob && !isRecording && (
           <>
             <button
+              type="button"
+              className="btn-secondary"
               onClick={() => cancelRecording()}
-              className="flex-1 px-3 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors text-sm font-medium"
             >
-              Clear
+              Discard
             </button>
             <button
+              type="button"
+              className="btn-primary"
               onClick={handleSend}
               disabled={isSending}
-              className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors text-sm font-medium"
             >
-              <Send className="w-4 h-4 inline mr-2" />
-              Send
+              {isSending ? "Sending..." : "Send"}
             </button>
           </>
         )}

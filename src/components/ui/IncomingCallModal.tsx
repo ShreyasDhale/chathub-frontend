@@ -1,66 +1,72 @@
 "use client";
 
-// No external icon library needed - using emojis
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useCallStore } from "@/store/call.store";
-import { useCall } from "@/hooks/useCall";
+import ChatIcon from "@/components/ui/ChatIcon";
 
-interface IncomingCallModalProps {
+type Props = {
   onAccept?: () => void;
   onReject?: () => void;
-}
+};
 
-export function IncomingCallModal({ onAccept, onReject }: IncomingCallModalProps) {
+/**
+ * Self-rendering ringing modal. Reads incoming call info from the store and
+ * delegates accept/reject to the parent's call handlers.
+ */
+export function IncomingCallModal({ onAccept, onReject }: Props) {
   const { incomingCall, incomingCallRinging } = useCallStore();
+  const [mounted, setMounted] = useState(false);
 
-  if (!incomingCall || !incomingCallRinging) {
-    return null;
-  }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const callTypeIcon = incomingCall.callType === "video" ? "📹" : "☎️";
-  const callTypeLabel =
-    incomingCall.callType === "video" ? "Video call" : "Voice call";
+  if (!incomingCall || !incomingCallRinging || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-8 max-w-sm w-full mx-4">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="text-6xl mb-4">{callTypeIcon}</div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {incomingCall.fromUserName || "Unknown"}
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {callTypeLabel}
-          </p>
+  const isVideo = incomingCall.callType === "video";
+  const callerName = incomingCall.fromUserName ?? "Unknown caller";
+  const initials = callerName.charAt(0).toUpperCase();
+
+  const modal = (
+    <div className="call-overlay">
+      <div className="call-card">
+        <div className="call-card-glow" aria-hidden="true">
+          <div className="call-pulse" />
+          <div className="call-pulse delay-1" />
+          <div className="call-pulse delay-2" />
         </div>
 
-        {/* Ringing animation */}
-        <div className="flex justify-center mb-8">
-          <div className="flex gap-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "200ms" }} />
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "400ms" }} />
-          </div>
-        </div>
+        <div className="call-card-avatar">{initials}</div>
+        <h2 className="call-card-name">{callerName}</h2>
+        <p className="call-card-type">
+          <ChatIcon name={isVideo ? "video" : "call"} size={16} />
+          {isVideo ? "Incoming video call" : "Incoming voice call"}
+        </p>
 
-        {/* Action buttons */}
-        <div className="flex gap-4">
+        <div className="call-card-actions">
           <button
+            type="button"
+            className="call-button call-button--reject"
             onClick={() => onReject?.()}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors text-xl"
-            title="Decline call"
+            aria-label="Decline call"
+            title="Decline"
           >
-            ☎️ Decline
+            <ChatIcon name="phone-down" size={26} />
           </button>
           <button
+            type="button"
+            className="call-button call-button--accept"
             onClick={() => onAccept?.()}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors text-xl"
-            title="Accept call"
+            aria-label="Accept call"
+            title="Accept"
           >
-            ✅ Accept
+            <ChatIcon name="phone-up" size={26} />
           </button>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

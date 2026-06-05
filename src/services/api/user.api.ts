@@ -1,6 +1,6 @@
 import { apiRequest } from "@/services/api/httpClient";
 import { DynamicApiResponse } from "@/types/api.types";
-import { UserProfile } from "@/types/chat.types";
+import { UserProfile, UsersListItem } from "@/types/chat.types";
 
 /** GET /Users/Profile */
 export function getProfile() {
@@ -8,6 +8,19 @@ export function getProfile() {
     method: "GET",
     showToast: false,
   });
+}
+
+/** GET /Users/Search?search=&page=&pageSize= — backend returns a DataTable. */
+export function searchUsers(query: string, page = 1, pageSize = 20) {
+  const params = new URLSearchParams({
+    search: query,
+    page: page.toString(),
+    pageSize: pageSize.toString(),
+  });
+  return apiRequest<DynamicApiResponse<UsersListItem[] | { Rows: UsersListItem[] }, null>>(
+    `/Users/Search?${params}`,
+    { method: "GET", showToast: false }
+  );
 }
 
 /** PUT /Users/UpdateProfile */
