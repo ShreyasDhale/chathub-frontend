@@ -80,6 +80,8 @@ export type ConversationMember = {
   isadmin?: number;
   isonline?: number;
   lastseenat?: string;
+  /** ISO timestamp set when a member leaves a group; absent for current members. */
+  leftat?: string;
 };
 
 export type UsersListItem = {

@@ -23,14 +23,7 @@ import { getApiErrorMessage, getRequestErrorMessage } from "@/utils/api.utils";
 
 // Stable empty references so Zustand selectors don't trigger infinite renders
 // when the requested key is absent.
-type StoredMember = {
-  userid: number;
-  username: string;
-  displayname?: string;
-  avatarurl?: string;
-  isonline?: number;
-};
-const EMPTY_MEMBERS_HEADER: StoredMember[] = [];
+const EMPTY_MEMBERS_HEADER: ConversationMember[] = [];
 const EMPTY_TYPING_HEADER: Set<number> = new Set();
 
 type Props = {

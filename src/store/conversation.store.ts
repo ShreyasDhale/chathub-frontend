@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import { ChatListItem } from "@/types/chat.types";
+import { ChatListItem, ConversationMember } from "@/types/chat.types";
 
 type ConversationState = {
   conversations: ChatListItem[];
   activeConversationId: number | null;
-  members: Record<number, Array<{ userid: number; username: string; displayname?: string; avatarurl?: string; isonline?: number }>>;
+  members: Record<number, ConversationMember[]>;
 
   setConversations: (list: ChatListItem[]) => void;
   setActiveConversation: (id: number | null) => void;
@@ -23,13 +23,13 @@ type ConversationState = {
   updateConversationName: (conversationId: number, chatname: string) => void;
 
   /** Add a member to a conversation in real-time */
-  addMember: (conversationId: number, member: { userid: number; username: string }) => void;
+  addMember: (conversationId: number, member: ConversationMember) => void;
 
   /** Remove a member from a conversation in real-time */
   removeMember: (conversationId: number, userId: number) => void;
 
   /** Set members for a conversation */
-  setMembers: (conversationId: number, members: Array<{ userid: number; username: string; displayname?: string; avatarurl?: string; isonline?: number }>) => void;
+  setMembers: (conversationId: number, members: ConversationMember[]) => void;
 
   /** Remove from list after archive/leave */
   removeConversation: (conversationId: number) => void;

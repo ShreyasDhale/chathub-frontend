@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from "react";
-import { MessagePayload } from "@/types/chat.types";
+import { ConversationMember, MessagePayload } from "@/types/chat.types";
 import { useChatStore } from "@/store/chat.store";
 import { useConversationStore } from "@/store/conversation.store";
 import ChatIcon from "@/components/ui/ChatIcon";
@@ -10,14 +10,7 @@ import ChatIcon from "@/components/ui/ChatIcon";
 // key is missing or React 19 will trigger an infinite update loop.
 const EMPTY_RECEIPTS: Record<number, number> = {};
 const EMPTY_TYPING: Set<number> = new Set();
-type ChatMember = {
-  userid: number;
-  username: string;
-  displayname?: string;
-  avatarurl?: string;
-  isonline?: number;
-};
-const EMPTY_MEMBERS: ChatMember[] = [];
+const EMPTY_MEMBERS: ConversationMember[] = [];
 
 type Props = {
   conversationId: number;
