@@ -5,6 +5,7 @@ import { SIDEBAR_ACTIONS, ChatActionId } from "@/constants/chatActions";
 import ChatToolbar from "@/components/ui/ChatToolbar";
 import ChatIcon from "@/components/ui/ChatIcon";
 import SidebarSearchPanel from "@/components/ui/SidebarSearchPanel";
+import { useChatStore } from "@/store/chat.store";
 import { useState } from "react";
 
 type Props = {
@@ -59,6 +60,8 @@ export default function ChatList({
   onCloseMenu,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const unreadByConv = useChatStore((s) => s.unreadByConversation);
+  const presenceByUser = useChatStore((s) => s.presenceByUser);
 
   function handleSidebarAction(id: ChatActionId) {
     if (id === "search-chats") setSearchOpen(true);
@@ -182,9 +185,18 @@ export default function ChatList({
             )
             : sorted.map((chat) => {
                 const isActive = activeChatId === chat.conversationid;
-                const unread = chat.unreadcount ?? 0;
+                const liveUnread = unreadByConv[chat.conversationid];
+                const unread = isActive
+                  ? 0
+                  : liveUnread ?? chat.unreadcount ?? 0;
                 const isPinned = (chat.ispinned ?? 0) === 1;
                 const isMuted = (chat.ismuted ?? 0) === 1;
+                const peerOnline =
+                  chat.peeruserid != null
+                    ? presenceByUser[chat.peeruserid]?.isOnline ??
+                      (chat.peeronline ?? 0) > 0
+                    : false;
+                const preview = chat.lastmessage ?? chat.lastmessagepreview;
                 return (
                   <li
                     key={chat.conversationid}
@@ -193,6 +205,9 @@ export default function ChatList({
                   >
                     <div className="avatar">
                       {chat.chatname[0]?.toUpperCase()}
+                      {peerOnline && (
+                        <span className="presence-dot" aria-label="online" />
+                      )}
                     </div>
                     <div className="user-info">
                       <div className="user-name-row">
@@ -203,8 +218,8 @@ export default function ChatList({
                       </div>
                       <div className="user-preview-row">
                         <span className="user-preview">
-                          {chat.lastmessage ? (
-                            chat.lastmessage
+                          {preview ? (
+                            preview
                           ) : (
                             <span
                               className={`chat-type ${chat.typecode === "GROUP" ? "group" : "direct"}`}

@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { loadchats } from "@/services/api/dashboard.api";
+import toast from "react-hot-toast";
 import { logout } from "@/services/api/auth.api";
-import { clearToken } from "@/utils/auth.storage";
+import { clearToken, getUserId } from "@/utils/auth.storage";
+import { useConversations } from "@/hooks/useConversations";
+import { useMessages } from "@/hooks/useMessages";
+import { useChatStore } from "@/store/chat.store";
+import { useConversationStore } from "@/store/conversation.store";
 import {
-  joinConversation,
-  leaveConversation,
   typingStarted,
   typingStopped,
+  sendMessageSignalR,
+  markMessagesReadSignalR,
 } from "@/services/socket/chat.actions";
-import { getSignalRConnection } from "@/services/socket/signalrClient";
-import { ChatListItem } from "@/types/chat.types";
+import { sendMessageRest, markAsRead } from "@/services/api/messages.api";
+import { ChatListItem, MessagePayload } from "@/types/chat.types";
 
 import ChatList from "@/components/ui/ChatList";
 import ChatHeader from "@/components/ui/ChatHeader";
@@ -27,97 +31,103 @@ import CallManager from "@/components/ui/CallManager";
 import ChatIcon from "@/components/ui/ChatIcon";
 
 /**
- * Main chat dashboard: sidebar list + active conversation panel + global modals.
- * Real-time messages arrive via SignalR "MessageReceived" after JoinConversation.
+ * Main chat dashboard. Sources of truth:
+ *  - useConversations()  → sidebar list + activeConversationId
+ *  - useMessages()       → REST history for active chat (paged)
+ *  - useChatStore        → realtime updates (typing, presence, receipts)
+ *
+ * SignalR events themselves are wired in registerChatEvents() at app startup.
  */
 export default function DashboardScreen() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
-  const [chats, setChats] = useState<ChatListItem[]>([]);
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [showMenu, setShowMenu] = useState(false);
+  const myUserId = useMemo(() => Number(getUserId() ?? 0), []);
+  const {
+    conversations,
+    activeConversationId,
+    setActiveConversation,
+    fetchConversations,
+  } = useConversations();
 
-  // Modal/panel visibility
+  const isConnected = useChatStore((s) => s.isConnected);
+  const markRead = useChatStore((s) => s.markConversationRead);
+
+  const { messages, loading, loadingOlder, hasMore, loadOlder } =
+    useMessages(activeConversationId);
+
+  const [showMenu, setShowMenu] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showInChatSearch, setShowInChatSearch] = useState(false);
 
-  const previousChatId = useRef<number | null>(null);
-  const connection = getSignalRConnection();
+  // Send: optimistic add to store, then SignalR (with REST fallback).
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || !activeConversationId) return;
 
-  useEffect(() => {
-    fetchChats();
-  }, []);
+      const clientMessageId = Date.now();
+      const optimistic: MessagePayload = {
+        messageId: -clientMessageId,
+        conversationId: activeConversationId,
+        senderId: myUserId,
+        message: trimmed,
+        clientMessageId,
+        sentAt: new Date().toISOString(),
+        isOptimistic: true,
+      };
+      useChatStore.getState().addMessage(optimistic);
 
-  /** Join/leave SignalR groups when the user switches conversations. */
-  useEffect(() => {
-    if (!activeChatId) return;
-    const prev = previousChatId.current;
-    if (prev) leaveConversation(prev);
-    joinConversation(activeChatId);
-    previousChatId.current = activeChatId;
-    return () => {
-      leaveConversation(activeChatId);
-    };
-  }, [activeChatId]);
-
-  /** Listen for inbound messages on the active hub connection. */
-  useEffect(() => {
-    if (!connection) return;
-    const handler = (data: any) => {
-      setMessages((prev) => [...prev, data]);
-    };
-    connection.on("MessageReceived", handler);
-    return () => {
-      connection.off("MessageReceived", handler);
-    };
-  }, [connection]);
-
-  /** Sends a text message through the SignalR hub. */
-  function sendMessage(message: string) {
-    if (!message.trim() || !activeChatId) return;
-    if (!connection) return;
-    connection.invoke("SendMessage", activeChatId, Date.now(), message);
-  }
+      let delivered = false;
+      try {
+        await sendMessageSignalR(activeConversationId, clientMessageId, trimmed);
+        delivered = true;
+      } catch {
+        // fall through to REST
+      }
+      if (!delivered) {
+        try {
+          await sendMessageRest({
+            ConversationId: activeConversationId,
+            Message: trimmed,
+            ClientMessageId: clientMessageId,
+            MessageTypeId: 1,
+          });
+        } catch {
+          toast.error("Couldn't send your message — please retry.");
+        }
+      }
+    },
+    [activeConversationId, myUserId]
+  );
 
   function handleTypingChange(typing: boolean) {
-    if (!activeChatId) return;
-    if (typing) typingStarted(activeChatId);
-    else typingStopped(activeChatId);
+    if (!activeConversationId) return;
+    if (typing) typingStarted(activeConversationId);
+    else typingStopped(activeConversationId);
   }
 
-  async function fetchChats() {
-    try {
-      setLoading(true);
-      const res = await loadchats();
-      const rows = res.Model as unknown;
-      const list: ChatListItem[] = Array.isArray(rows)
-        ? (rows as ChatListItem[])
-        : (rows && typeof rows === "object"
-            ? (((rows as { Rows?: ChatListItem[]; rows?: ChatListItem[] }).Rows ??
-                ((rows as { rows?: ChatListItem[] }).rows ?? [])) as ChatListItem[])
-            : []);
-      setChats(list);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // When the user opens or returns to a conversation, push a "read" pointer.
+  useEffect(() => {
+    if (!activeConversationId || messages.length === 0) return;
+    const lastId = messages[messages.length - 1].messageId;
+    if (lastId <= 0) return;
+    markRead(activeConversationId);
+    markAsRead(activeConversationId, lastId).catch(() => {});
+    markMessagesReadSignalR(activeConversationId, lastId).catch(() => {});
+  }, [activeConversationId, messages, markRead]);
 
   function onNewChat() {
     setShowMenu(false);
     setShowNewChatModal(true);
   }
 
-  /** After StartChat succeeds: refresh list and return to conversation picker. */
   async function handleChatCreated() {
     setShowNewChatModal(false);
-    setMessages([]);
-    setActiveChatId(null);
-    await fetchChats();
+    setActiveConversation(null);
+    await fetchConversations();
     router.refresh();
   }
 
@@ -125,29 +135,30 @@ export default function DashboardScreen() {
     setShowMenu(false);
     await logout();
     clearToken();
+    useChatStore.getState().reset();
+    useConversationStore.getState().setConversations([]);
     router.replace("/login");
   }
 
   function handleChatRemoved(conversationId: number) {
-    setChats((prev) => prev.filter((c) => c.conversationid !== conversationId));
-    if (activeChatId === conversationId) {
-      setActiveChatId(null);
-      setMessages([]);
+    useConversationStore.getState().removeConversation(conversationId);
+    if (activeConversationId === conversationId) {
+      setActiveConversation(null);
     }
   }
 
   function handleChatUpdated(updated: ChatListItem) {
-    setChats((prev) =>
-      prev.map((c) =>
-        c.conversationid === updated.conversationid ? { ...c, ...updated } : c
-      )
-    );
+    useConversationStore.getState().upsertConversation(updated);
   }
 
-  const activeChat = chats.find((c) => c.conversationid === activeChatId);
+  const activeChat = conversations.find(
+    (c) => c.conversationid === activeConversationId
+  );
 
   return (
-    <div className={`dashboard ${activeChatId ? "dashboard--chat-open" : ""}`}>
+    <div
+      className={`dashboard ${activeConversationId ? "dashboard--chat-open" : ""}`}
+    >
       <div className="dashboard-bg" aria-hidden="true">
         <div className="blob blob-1" />
         <div className="blob blob-2" />
@@ -155,13 +166,10 @@ export default function DashboardScreen() {
       </div>
 
       <ChatList
-        chats={chats}
-        loading={loading}
-        activeChatId={activeChatId}
-        onSelect={(id) => {
-          setMessages([]);
-          setActiveChatId(id);
-        }}
+        chats={conversations}
+        loading={loading && conversations.length === 0}
+        activeChatId={activeConversationId}
+        onSelect={(id) => setActiveConversation(id)}
         onLogout={handleLogout}
         showMenu={showMenu}
         onNewChat={onNewChat}
@@ -169,7 +177,7 @@ export default function DashboardScreen() {
           setShowMenu(false);
           setShowSettingsModal(true);
         }}
-        onChatStarted={fetchChats}
+        onChatStarted={fetchConversations}
         toggleMenu={() => setShowMenu((v) => !v)}
         onCloseMenu={() => setShowMenu(false)}
       />
@@ -217,10 +225,7 @@ export default function DashboardScreen() {
             <>
               <ChatHeader
                 chat={activeChat}
-                onBack={() => {
-                  setActiveChatId(null);
-                  setMessages([]);
-                }}
+                onBack={() => setActiveConversation(null)}
                 onOpenInfo={() => setShowInfoModal(true)}
                 onOpenMembers={() => setShowMembersModal(true)}
                 onOpenSearch={() => setShowInChatSearch(true)}
@@ -228,13 +233,18 @@ export default function DashboardScreen() {
                 onChatUpdated={handleChatUpdated}
               />
               <ChatBody
+                conversationId={activeChat.conversationid}
                 messages={messages}
-                activeChatId={activeChatId ?? 0}
+                currentUserId={myUserId}
+                loading={loading}
+                loadingOlder={loadingOlder}
+                hasMore={hasMore}
+                onLoadOlder={loadOlder}
               />
               <ChatInput
-                conversationId={activeChatId ?? 0}
+                conversationId={activeChat.conversationid}
                 onSend={sendMessage}
-                disabled={!connection}
+                disabled={!isConnected}
                 onTypingChange={handleTypingChange}
               />
             </>
@@ -244,9 +254,7 @@ export default function DashboardScreen() {
             <div className="chat-placeholder-icon">
               <ChatIcon name="newChat" size={36} />
             </div>
-            <span className="chat-placeholder-text">
-              Welcome to ChatHub
-            </span>
+            <span className="chat-placeholder-text">Welcome to ChatHub</span>
             <span className="chat-placeholder-hint">
               Select a chat from the sidebar or start a new conversation
             </span>

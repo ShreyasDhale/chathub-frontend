@@ -55,8 +55,12 @@ export type ChatListItem = {
   ispinned?: number;
   ismuted?: number;
   lastmessage?: string;
+  lastmessagepreview?: string;
   lastmessageat?: string;
   unreadcount?: number;
+  peeruserid?: number;
+  peeronline?: number;
+  peerlastseenat?: string;
 };
 
 export type ConversationDetail = {

@@ -8,23 +8,53 @@ import { registerCallEvents } from "@/services/socket/callEvents";
 import { useChatStore } from "@/store/chat.store";
 import { useConversationStore } from "@/store/conversation.store";
 import { MessagePayload, User } from "@/types/chat.types";
+import { getUserId } from "@/utils/auth.storage";
 
 let reconnectToastId: string | null = null;
+
+/** Backend MessageReceivedPayload uses these casings; tolerate variations. */
+function normalizeMessage(raw: any): MessagePayload {
+  return {
+    messageId: raw.messageId ?? raw.MessageId ?? raw.messageid,
+    conversationId: raw.conversationId ?? raw.ConversationId ?? raw.conversationid,
+    senderId: raw.senderId ?? raw.SenderId ?? raw.senderuserid,
+    senderName: raw.senderName ?? raw.SenderName,
+    message: raw.message ?? raw.Message ?? raw.messagecontent ?? "",
+    clientMessageId: raw.clientMessageId ?? raw.ClientMessageId,
+    sentAt: raw.sentAt ?? raw.SentAt ?? raw.creationdate ?? new Date().toISOString(),
+    isEdited: raw.isEdited ?? raw.IsEdited,
+    isDeleted: raw.isDeleted ?? raw.IsDeleted,
+  };
+}
 
 export function registerChatEvents() {
   const connection = getSignalRConnection();
   if (!connection || areEventsRegistered()) return;
 
   // ── Inbound messages ────────────────────────────────────────────────────
-  // Backend sends BOTH "MessageReceived" and "ReceiveMessage" — use only one
-  connection.on("MessageReceived", (payload: MessagePayload) => {
-    useChatStore.getState().addMessage(payload);
-    useChatStore.getState().incrementUnread(payload.conversationId);
+  // Backend currently emits BOTH "MessageReceived" and "ReceiveMessage" for
+  // legacy reasons. We handle only the canonical one and dedup by id in the
+  // store anyway.
+  connection.on("MessageReceived", (raw: any) => {
+    const payload = normalizeMessage(raw);
+    if (!payload.conversationId) return;
+    const myId = Number(getUserId() ?? 0);
+    const state = useChatStore.getState();
+
+    state.addMessage(payload);
     useConversationStore.getState().updateLastMessage(
       payload.conversationId,
       payload.message,
       payload.sentAt
     );
+
+    const isMine = payload.senderId === myId;
+    const isActive = state.activeConversationId === payload.conversationId;
+
+    // Only bump unread for non-active conversations and not from self.
+    if (!isMine && !isActive) {
+      state.incrementUnread(payload.conversationId);
+    }
   });
 
   // ── Typing indicator ────────────────────────────────────────────────────
@@ -57,17 +87,61 @@ export function registerChatEvents() {
   );
 
   // ── Read receipts ───────────────────────────────────────────────────────
+  // Backend hub emits "MessagesRead" via MarkMessagesReadAsync.
   connection.on(
     "MessagesRead",
     (data: { conversationId: number; userId: number; lastReadMessageId: number }) => {
-      // Could update per-message read status here in future
+      useChatStore
+        .getState()
+        .setReadReceipt(data.conversationId, data.userId, data.lastReadMessageId);
+    }
+  );
+
+  // ── Per-message delivered / read fine-grained events (when supported) ───
+  connection.on(
+    "MessageDelivered",
+    (data: { messageId: number; userId: number; conversationId?: number }) => {
+      // Treat delivered as "at least delivered up to messageId" for that user
+      if (data.conversationId) {
+        useChatStore
+          .getState()
+          .setReadReceipt(data.conversationId, data.userId, data.messageId);
+      }
+    }
+  );
+
+  connection.on(
+    "MessageRead",
+    (data: { messageId: number; userId: number; conversationId?: number }) => {
+      if (data.conversationId) {
+        useChatStore
+          .getState()
+          .setReadReceipt(data.conversationId, data.userId, data.messageId);
+      }
     }
   );
 
   // ── Presence ────────────────────────────────────────────────────────────
-  connection.on("UserPresenceChanged", (users: User[]) => {
-    useChatStore.getState().setOnlineUsers(users);
+  // Bulk push (legacy, server may or may not emit)
+  connection.on("UserPresenceChanged", (payload: User[] | { userId: number; isOnline: boolean; lastSeenAt?: string }) => {
+    if (Array.isArray(payload)) {
+      useChatStore.getState().setOnlineUsers(payload);
+    } else if (payload && typeof payload === "object") {
+      useChatStore.getState().setPresence(
+        payload.userId,
+        payload.isOnline,
+        payload.lastSeenAt
+      );
+    }
   });
+
+  // Granular per-user presence update from backend.
+  connection.on(
+    "UserPresence",
+    (data: { userId: number; isOnline: boolean; lastSeenAt?: string }) => {
+      useChatStore.getState().setPresence(data.userId, data.isOnline, data.lastSeenAt);
+    }
+  );
 
   // ── Conversation updates ────────────────────────────────────────────────
   connection.on(
@@ -76,7 +150,6 @@ export function registerChatEvents() {
       useConversationStore
         .getState()
         .updateConversationName(data.conversationId, data.chatname);
-      toast.success("Conversation updated");
     }
   );
 
@@ -105,9 +178,6 @@ export function registerChatEvents() {
     }
   );
 
-  // ── Calling events (fully implemented in Phase 3) ──────────────────────
-  // These are now handled by registerCallEvents() below
-
   // ── Reconnect lifecycle ─────────────────────────────────────────────────
   connection.onreconnecting(() => {
     useChatStore.getState().setConnectionStatus(false);
@@ -129,11 +199,8 @@ export function registerChatEvents() {
       toast.dismiss(reconnectToastId);
       reconnectToastId = null;
     }
-    toast.error("Disconnected from server");
   });
 
-  // Register call events (Phase 3)
   registerCallEvents();
-
   markEventsRegistered();
 }

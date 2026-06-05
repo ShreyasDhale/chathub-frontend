@@ -3,6 +3,9 @@ import { typingStarted, typingStopped } from "@/services/socket/chat.actions";
 import { useChatStore } from "@/store/chat.store";
 
 const TYPING_DEBOUNCE_MS = 2000;
+// Stable empty Set so Zustand selectors don't return a fresh reference every
+// render when nobody is typing — prevents React 19 from looping forever.
+const EMPTY_TYPING_SET: Set<number> = new Set();
 
 export function useTyping(conversationId: number | null) {
   const isTypingRef = useRef(false);
@@ -47,11 +50,10 @@ export function useTypingDisplay(
   currentUserId: number | null,
   members: Record<number, string> = {}
 ): string {
-  const typingSet = useChatStore(
-    (s) =>
-      conversationId
-        ? s.typingByConversation[conversationId] ?? new Set<number>()
-        : new Set<number>()
+  const typingSet = useChatStore((s) =>
+    conversationId
+      ? s.typingByConversation[conversationId] ?? EMPTY_TYPING_SET
+      : EMPTY_TYPING_SET
   );
 
   const others = [...typingSet].filter((uid) => uid !== currentUserId);

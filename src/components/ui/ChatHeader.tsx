@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { ChatListItem } from "@/types/chat.types";
+import { ChatListItem, ConversationMember } from "@/types/chat.types";
 import { CHAT_HEADER_ACTIONS, ChatActionId } from "@/constants/chatActions";
 import { useCall } from "@/hooks/useCall";
 import { useCallStore } from "@/store/call.store";
+import { useChatStore } from "@/store/chat.store";
+import { useConversationStore } from "@/store/conversation.store";
 import ChatToolbar from "@/components/ui/ChatToolbar";
 import ChatIcon from "@/components/ui/ChatIcon";
 import ChatMoreMenu from "@/components/ui/ChatMoreMenu";
@@ -15,8 +17,21 @@ import {
   leaveConversationRest,
   muteConversation,
   pinConversation,
+  getConversationMembers,
 } from "@/services/api/chat.api";
 import { getApiErrorMessage, getRequestErrorMessage } from "@/utils/api.utils";
+
+// Stable empty references so Zustand selectors don't trigger infinite renders
+// when the requested key is absent.
+type StoredMember = {
+  userid: number;
+  username: string;
+  displayname?: string;
+  avatarurl?: string;
+  isonline?: number;
+};
+const EMPTY_MEMBERS_HEADER: StoredMember[] = [];
+const EMPTY_TYPING_HEADER: Set<number> = new Set();
 
 type Props = {
   chat?: ChatListItem;
@@ -27,6 +42,20 @@ type Props = {
   onChatRemoved?: (conversationId: number) => void;
   onChatUpdated?: (conversation: ChatListItem) => void;
 };
+
+function formatLastSeen(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "recently";
+  const diffMs = Date.now() - d.getTime();
+  const min = Math.floor(diffMs / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return d.toLocaleDateString();
+}
 
 /**
  * Active conversation top bar: avatar, title, quick actions
@@ -58,9 +87,85 @@ export default function ChatHeader({
   const { startCall } = useCall(chat.conversationid, currentUserId);
   const { activeCall } = useCallStore();
 
+  // Preload conversation members so we can resolve names for "X is typing" and
+  // surface the other party's online presence in 1:1 chats.
+  const setMembers = useConversationStore((s) => s.setMembers);
+  const members = useConversationStore(
+    (s) => s.members[chat.conversationid] ?? EMPTY_MEMBERS_HEADER
+  );
+  const presenceByUser = useChatStore((s) => s.presenceByUser);
+  const typingSet = useChatStore(
+    (s) => s.typingByConversation[chat.conversationid] ?? EMPTY_TYPING_HEADER
+  );
+  const typingOthers = useMemo(
+    () => Array.from(typingSet).filter((u) => u !== currentUserId),
+    [typingSet, currentUserId]
+  );
+
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!chat.conversationid) return;
+    if (members.length > 0) return;
+    getConversationMembers(chat.conversationid)
+      .then((res) => {
+        if (cancelled) return;
+        const model = res.Model as unknown;
+        const rows: ConversationMember[] = Array.isArray(model)
+          ? (model as ConversationMember[])
+          : (model && typeof model === "object"
+              ? (((model as { Rows?: ConversationMember[] }).Rows ?? []) as ConversationMember[])
+              : []);
+        if (rows.length > 0) {
+          setMembers(chat.conversationid, rows);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [chat.conversationid, members.length, setMembers]);
+
+  // Compute the "presence string": typing > online > last seen.
+  const otherMember = useMemo(() => {
+    if (chat.typecode === "GROUP") return null;
+    return members.find((m) => m.userid !== currentUserId) ?? null;
+  }, [members, chat.typecode, currentUserId]);
+
+  const presenceText = useMemo(() => {
+    if (typingOthers.length > 0) {
+      if (chat.typecode === "GROUP") {
+        const names = typingOthers
+          .map((id) => members.find((m) => m.userid === id))
+          .filter(Boolean)
+          .map((m) => (m as ConversationMember).displayname || (m as ConversationMember).username);
+        if (names.length === 1) return `${names[0]} is typing…`;
+        if (names.length > 1) return "Several people are typing…";
+        return "Typing…";
+      }
+      return "typing…";
+    }
+    if (chat.typecode === "GROUP") {
+      const total = members.filter((m) => !m.leftat).length;
+      const online = members.filter((m) => {
+        const p = presenceByUser[m.userid];
+        return p?.isOnline || (m.isonline ?? 0) > 0;
+      }).length;
+      return `${total} members${online > 0 ? ` · ${online} online` : ""}`;
+    }
+    if (otherMember) {
+      const p = presenceByUser[otherMember.userid];
+      const online = p?.isOnline || (otherMember.isonline ?? 0) > 0;
+      if (online) return "Online";
+      const seen = p?.lastSeenAt || otherMember.lastseenat;
+      if (seen) return `Last seen ${formatLastSeen(seen)}`;
+      return "Direct message";
+    }
+    return "Direct message";
+  }, [typingOthers, members, otherMember, presenceByUser, chat.typecode]);
 
   async function handleStartAudioCall() {
     try {
@@ -205,6 +310,14 @@ export default function ChatHeader({
 
       <div className="chat-header-avatar">
         {chat.chatname.charAt(0).toUpperCase()}
+        {!isGroup && otherMember && (
+          (() => {
+            const p = presenceByUser[otherMember.userid];
+            const online = p?.isOnline || (otherMember.isonline ?? 0) > 0;
+            if (!online) return null;
+            return <span className="presence-dot" aria-label="online" />;
+          })()
+        )}
       </div>
 
       <button
@@ -226,8 +339,10 @@ export default function ChatHeader({
             </span>
           )}
         </div>
-        <div className="chat-header-type">
-          {isGroup ? "Group conversation" : "Direct message"}
+        <div
+          className={`chat-header-type ${typingOthers.length > 0 ? "is-typing" : ""}`}
+        >
+          {presenceText}
         </div>
       </button>
 
